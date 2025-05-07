@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 reqwest = "0.12.15"
+regex = "1.11.1"
