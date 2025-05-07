@@ -1,8 +1,7 @@
-use std::marker::PhantomData;
-
 use super::HttpDownloader;
 
 use reqwest::Client;
+use std::marker::PhantomData;
 
 pub struct ClientRequired;
 pub struct UrlRequired;
@@ -44,14 +43,24 @@ impl HttpDownloaderSetupBuilder {
         }
     }
 
-    pub fn build(&self) -> HttpDownloaderSetup {
-        HttpDownloaderSetup {}
+    pub fn build(self) -> HttpDownloaderSetup {
+        HttpDownloaderSetup {
+            client: self.client.unwrap(),
+            raw_url: self.raw_url.unwrap(),
+        }
     }
 }
 
-pub struct HttpDownloaderSetup {}
+pub struct HttpDownloaderSetup {
+    client: Client,
+    raw_url: String,
+}
 
 impl HttpDownloaderSetup {
+    async fn get_headers(&self) -> Result<reqwest::Response, reqwest::Error> {
+        self.client.head(&self.raw_url).send().await
+    }
+
     pub fn init(&self) -> HttpDownloader {
         HttpDownloader {}
     }
