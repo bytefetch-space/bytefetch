@@ -1,11 +1,11 @@
 mod setup;
 
-use setup::HttpDownloaderSetupBuilder;
+use setup::{ClientRequired, HttpDownloaderSetupBuilder};
 
 pub struct HttpDownloader {}
 
 impl HttpDownloader {
-    pub fn setup() -> HttpDownloaderSetupBuilder {
+    pub fn setup() -> HttpDownloaderSetupBuilder<ClientRequired> {
         HttpDownloaderSetupBuilder::default()
     }
 }
