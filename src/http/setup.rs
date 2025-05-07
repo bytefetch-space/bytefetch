@@ -22,4 +22,10 @@ impl HttpDownloaderSetupBuilder {
         self.raw_url = Some(raw_url.to_string());
         self
     }
+
+    pub fn build(&self) -> HttpDownloaderSetup {
+        HttpDownloaderSetup {}
+    }
 }
+
+pub struct HttpDownloaderSetup {}
