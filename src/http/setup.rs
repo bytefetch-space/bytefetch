@@ -1,3 +1,5 @@
+use super::HttpDownloader;
+
 use reqwest::Client;
 
 pub struct HttpDownloaderSetupBuilder {
@@ -29,3 +31,9 @@ impl HttpDownloaderSetupBuilder {
 }
 
 pub struct HttpDownloaderSetup {}
+
+impl HttpDownloaderSetup {
+    pub fn init(&self) -> HttpDownloader {
+        HttpDownloader {}
+    }
+}
