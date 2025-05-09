@@ -2,7 +2,7 @@ use super::{HttpDownloader, info::HttpDownloadInfo};
 
 use reqwest::{
     Client,
-    header::{CONTENT_DISPOSITION, CONTENT_LENGTH},
+    header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH},
 };
 use std::marker::PhantomData;
 
@@ -67,9 +67,11 @@ impl HttpDownloaderSetup {
     fn generate_info(&self, headers_response: reqwest::Response) -> HttpDownloadInfo {
         let content_disposition = &headers_response.headers().get(CONTENT_DISPOSITION);
         let content_length = &headers_response.headers().get(CONTENT_LENGTH);
+        let accept_ranges = &headers_response.headers().get(ACCEPT_RANGES);
         HttpDownloadInfo::default()
             .extract_and_set_filename(&self.raw_url, content_disposition)
             .extract_and_set_content_length(content_length)
+            .extract_and_set_is_resumable(accept_ranges)
     }
 
     pub async fn init(&self) -> HttpDownloader {
