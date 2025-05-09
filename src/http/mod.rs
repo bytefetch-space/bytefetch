@@ -1,13 +1,14 @@
 mod filename_utils;
+mod info;
 mod setup;
 #[cfg(test)]
 mod tests;
 
+use info::HttpDownloadInfo;
 use setup::{ClientRequired, HttpDownloaderSetupBuilder};
 
 pub struct HttpDownloader {
-    pub filename: String,
-    pub content_length: Option<u64>,
+    pub info: HttpDownloadInfo,
 }
 
 impl HttpDownloader {

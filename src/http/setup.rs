@@ -1,8 +1,8 @@
-use super::{HttpDownloader, filename_utils};
+use super::{HttpDownloader, info::HttpDownloadInfo};
 
 use reqwest::{
     Client,
-    header::{CONTENT_DISPOSITION, CONTENT_LENGTH, HeaderValue},
+    header::{CONTENT_DISPOSITION, CONTENT_LENGTH},
 };
 use std::marker::PhantomData;
 
@@ -64,21 +64,17 @@ impl HttpDownloaderSetup {
         self.client.head(&self.raw_url).send().await
     }
 
-    fn extract_content_length(content_length: &Option<&HeaderValue>) -> Option<u64> {
-        content_length
-            .and_then(|v| v.to_str().ok())
-            .and_then(|s| s.parse::<u64>().ok())
+    fn generate_info(&self, headers_response: reqwest::Response) -> HttpDownloadInfo {
+        let content_disposition = &headers_response.headers().get(CONTENT_DISPOSITION);
+        let content_length = &headers_response.headers().get(CONTENT_LENGTH);
+        HttpDownloadInfo::default()
+            .extract_and_set_filename(&self.raw_url, content_disposition)
+            .extract_and_set_content_length(content_length)
     }
 
     pub async fn init(&self) -> HttpDownloader {
-        let headers = self.get_headers().await.unwrap();
-        let content_disposition = &headers.headers().get(CONTENT_DISPOSITION);
-        let filename = filename_utils::extract_filename(&self.raw_url, content_disposition);
-        let content_length = &headers.headers().get(CONTENT_LENGTH);
-        let content_length = HttpDownloaderSetup::extract_content_length(content_length);
-        HttpDownloader {
-            filename,
-            content_length,
-        }
+        let headers_response = self.get_headers().await.unwrap();
+        let info = self.generate_info(headers_response);
+        HttpDownloader { info }
     }
 }
