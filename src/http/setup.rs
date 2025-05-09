@@ -63,14 +63,8 @@ impl HttpDownloaderSetup {
 
     pub async fn init(&self) -> HttpDownloader {
         let headers = self.get_headers().await.unwrap();
-        let mut filename = filename_utils::extract_filename_from_header(
-            &headers.headers().get(CONTENT_DISPOSITION),
-        );
-        if filename == None {
-            filename = filename_utils::extract_filename_from_url(&self.raw_url);
-        }
-        HttpDownloader {
-            filename: filename.unwrap(),
-        }
+        let content_disposition = &headers.headers().get(CONTENT_DISPOSITION);
+        let filename = filename_utils::extract_filename(&self.raw_url, content_disposition);
+        HttpDownloader { filename }
     }
 }
