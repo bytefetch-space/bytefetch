@@ -1,6 +1,9 @@
 use super::{HttpDownloader, filename_utils};
 
-use reqwest::{Client, header::CONTENT_DISPOSITION};
+use reqwest::{
+    Client,
+    header::{CONTENT_DISPOSITION, CONTENT_LENGTH, HeaderValue},
+};
 use std::marker::PhantomData;
 
 pub struct ClientRequired;
@@ -61,10 +64,21 @@ impl HttpDownloaderSetup {
         self.client.head(&self.raw_url).send().await
     }
 
+    fn extract_content_length(content_length: &Option<&HeaderValue>) -> Option<u64> {
+        content_length
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok())
+    }
+
     pub async fn init(&self) -> HttpDownloader {
         let headers = self.get_headers().await.unwrap();
         let content_disposition = &headers.headers().get(CONTENT_DISPOSITION);
         let filename = filename_utils::extract_filename(&self.raw_url, content_disposition);
-        HttpDownloader { filename }
+        let content_length = &headers.headers().get(CONTENT_LENGTH);
+        let content_length = HttpDownloaderSetup::extract_content_length(content_length);
+        HttpDownloader {
+            filename,
+            content_length,
+        }
     }
 }

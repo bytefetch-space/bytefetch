@@ -7,6 +7,7 @@ use setup::{ClientRequired, HttpDownloaderSetupBuilder};
 
 pub struct HttpDownloader {
     pub filename: String,
+    pub content_length: Option<u64>,
 }
 
 impl HttpDownloader {
