@@ -1,3 +1,4 @@
+mod config;
 mod filename_utils;
 mod info;
 mod setup;

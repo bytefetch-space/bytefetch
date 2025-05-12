@@ -1,3 +1,5 @@
+use crate::http::config::HttpDownloadConfig;
+
 use super::{HttpDownloader, info::HttpDownloadInfo};
 
 use reqwest::{
@@ -12,6 +14,7 @@ pub struct SetupBuilder;
 pub struct HttpDownloaderSetupBuilder<State = SetupBuilder> {
     client: Option<Client>,
     raw_url: Option<String>,
+    threads_count: Option<u8>,
     state: PhantomData<State>,
 }
 
@@ -21,6 +24,7 @@ impl HttpDownloaderSetupBuilder<ClientRequired> {
         HttpDownloaderSetupBuilder {
             client: self.client,
             raw_url: self.raw_url,
+            threads_count: self.threads_count,
             state: PhantomData::<UrlRequired>,
         }
     }
@@ -32,6 +36,7 @@ impl HttpDownloaderSetupBuilder<UrlRequired> {
         HttpDownloaderSetupBuilder {
             client: self.client,
             raw_url: self.raw_url,
+            threads_count: self.threads_count,
             state: PhantomData::<SetupBuilder>,
         }
     }
@@ -42,11 +47,18 @@ impl HttpDownloaderSetupBuilder {
         HttpDownloaderSetupBuilder::<ClientRequired> {
             client: None,
             raw_url: None,
+            threads_count: None,
             state: PhantomData::<ClientRequired>,
         }
     }
 
+    pub fn threads_count(mut self, count: u8) -> Self {
+        self.threads_count = Some(count);
+        self
+    }
+
     pub fn build(self) -> HttpDownloaderSetup {
+        let config = HttpDownloadConfig::default().set_thread_count(self.threads_count);
         HttpDownloaderSetup {
             client: self.client.unwrap(),
             raw_url: self.raw_url.unwrap(),
