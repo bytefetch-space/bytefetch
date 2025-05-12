@@ -1,6 +1,6 @@
 use crate::http::config::HttpDownloadConfig;
 
-use super::{HttpDownloader, HttpDownloaderSetupErrors, info::HttpDownloadInfo};
+use super::{HttpDownloadMode, HttpDownloader, HttpDownloaderSetupErrors, info::HttpDownloadInfo};
 
 use reqwest::{
     Client,
@@ -62,6 +62,7 @@ impl HttpDownloaderSetupBuilder {
         Ok(HttpDownloaderSetup {
             client: self.client.unwrap(),
             raw_url: self.raw_url.unwrap(),
+            config,
         })
     }
 }
@@ -70,6 +71,7 @@ impl HttpDownloaderSetupBuilder {
 pub struct HttpDownloaderSetup {
     client: Client,
     raw_url: String,
+    config: HttpDownloadConfig,
 }
 
 impl HttpDownloaderSetup {
@@ -87,9 +89,22 @@ impl HttpDownloaderSetup {
             .extract_and_set_is_resumable(accept_ranges)
     }
 
+    fn determine_mode(&self, info: &HttpDownloadInfo) -> HttpDownloadMode {
+        match (
+            self.config.threads_count,
+            info.content_length(),
+            info.is_resumable(),
+        ) {
+            (_, _, false) => return HttpDownloadMode::NonResumable,
+            (_, None, true) | (1, _, true) => return HttpDownloadMode::ResumableStream,
+            (_, _, true) => return HttpDownloadMode::ResumableMultithread,
+        }
+    }
+
     pub async fn init(&self) -> HttpDownloader {
         let headers_response = self.get_headers().await.unwrap();
         let info = self.generate_info(headers_response);
-        HttpDownloader { info }
+        let mode = self.determine_mode(&info);
+        HttpDownloader { info, mode }
     }
 }

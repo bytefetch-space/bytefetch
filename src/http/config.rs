@@ -4,6 +4,7 @@ const DEFAULT_THREADS_COUNT: u8 = 8;
 const MIN_THREADS_COUNT: u8 = 1;
 const MAX_THREADS_COUNT: u8 = 64;
 
+#[derive(Debug)]
 pub(super) struct HttpDownloadConfig {
     pub(super) threads_count: u8,
 }
