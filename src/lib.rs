@@ -1,2 +1,2 @@
 mod http;
-pub use http::HttpDownloader;
+pub use http::{HttpDownloader, HttpDownloaderSetupErrors};

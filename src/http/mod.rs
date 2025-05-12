@@ -17,3 +17,8 @@ impl HttpDownloader {
         HttpDownloaderSetupBuilder::default()
     }
 }
+
+#[derive(Debug)]
+pub enum HttpDownloaderSetupErrors {
+    InvalidThreadsCount,
+}

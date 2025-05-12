@@ -1,6 +1,6 @@
 use crate::http::config::HttpDownloadConfig;
 
-use super::{HttpDownloader, info::HttpDownloadInfo};
+use super::{HttpDownloader, HttpDownloaderSetupErrors, info::HttpDownloadInfo};
 
 use reqwest::{
     Client,
@@ -57,15 +57,16 @@ impl HttpDownloaderSetupBuilder {
         self
     }
 
-    pub fn build(self) -> HttpDownloaderSetup {
-        let config = HttpDownloadConfig::default().set_thread_count(self.threads_count);
-        HttpDownloaderSetup {
+    pub fn build(self) -> Result<HttpDownloaderSetup, HttpDownloaderSetupErrors> {
+        let config = HttpDownloadConfig::default().set_thread_count(self.threads_count)?;
+        Ok(HttpDownloaderSetup {
             client: self.client.unwrap(),
             raw_url: self.raw_url.unwrap(),
-        }
+        })
     }
 }
 
+#[derive(Debug)]
 pub struct HttpDownloaderSetup {
     client: Client,
     raw_url: String,
