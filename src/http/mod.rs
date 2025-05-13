@@ -5,12 +5,14 @@ mod setup;
 #[cfg(test)]
 mod tests;
 
+use config::HttpDownloadConfig;
 use info::HttpDownloadInfo;
 use setup::{ClientRequired, HttpDownloaderSetupBuilder};
 
 pub struct HttpDownloader {
     pub info: HttpDownloadInfo,
     pub mode: HttpDownloadMode,
+    config: HttpDownloadConfig,
 }
 
 impl HttpDownloader {
@@ -23,7 +25,7 @@ impl HttpDownloader {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum HttpDownloadMode {
     NonResumable,
     ResumableStream,

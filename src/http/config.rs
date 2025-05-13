@@ -7,11 +7,15 @@ const MAX_THREADS_COUNT: u8 = 64;
 #[derive(Debug)]
 pub(super) struct HttpDownloadConfig {
     pub(super) threads_count: u8,
+    pub(super) split_result: Option<(u64, u64)>,
 }
 
 impl HttpDownloadConfig {
     pub(super) fn default() -> Self {
-        Self { threads_count: 0 }
+        Self {
+            threads_count: 0,
+            split_result: None,
+        }
     }
 
     pub(super) fn set_thread_count(
