@@ -6,7 +6,7 @@ use reqwest::{
     Client,
     header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH},
 };
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::Arc};
 
 pub struct ClientRequired;
 pub struct UrlRequired;
@@ -136,6 +136,12 @@ impl HttpDownloaderSetup {
             info.content_length(),
             config.threads_count,
         );
-        HttpDownloader { info, mode, config }
+        HttpDownloader {
+            client: Arc::new(self.client),
+            raw_url: Arc::new(self.raw_url),
+            info,
+            mode,
+            config,
+        }
     }
 }

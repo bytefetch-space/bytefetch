@@ -1,15 +1,21 @@
 mod config;
+mod core;
 mod filename_utils;
 mod info;
 mod setup;
 #[cfg(test)]
 mod tests;
 
+use std::sync::Arc;
+
 use config::HttpDownloadConfig;
 use info::HttpDownloadInfo;
+use reqwest::Client;
 use setup::{ClientRequired, HttpDownloaderSetupBuilder};
 
 pub struct HttpDownloader {
+    client: Arc<Client>,
+    raw_url: Arc<String>,
     pub info: HttpDownloadInfo,
     pub mode: HttpDownloadMode,
     config: HttpDownloadConfig,
