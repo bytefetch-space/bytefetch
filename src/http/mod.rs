@@ -5,6 +5,7 @@ mod info;
 mod setup;
 #[cfg(test)]
 mod tests;
+mod throttle;
 
 use std::sync::Arc;
 

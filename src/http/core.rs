@@ -1,17 +1,10 @@
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::Duration,
-};
+use std::sync::Arc;
 
+use bytes::Bytes;
 use reqwest::{Client, header::RANGE};
-use tokio::sync::Barrier;
+use tokio::sync::mpsc::{Sender, channel};
 
-use super::HttpDownloader;
-
-const CHUNK_SIZE: usize = 16 * 1024;
+use super::{HttpDownloader, throttle::Throttler};
 
 impl HttpDownloader {
     fn extract_part_range((part_size, parts_before_decrease): (u64, u64), index: u64) -> String {
@@ -28,32 +21,19 @@ impl HttpDownloader {
 
     pub async fn start(&self) {
         let mut handles = vec![];
-        let throttle_speed = Some(32 * 1024);
-        let throttle_timing =
-            HttpDownloader::compute_throttle_timing(self.config.threads_count, throttle_speed);
-        let throttle_timing_arc = Arc::new(throttle_timing);
-        let throttle_changed = Arc::new(AtomicBool::new(true));
-        let barrier = Arc::new(Barrier::new(self.config.threads_count as usize));
+        let throttle_speed: Option<u64> = None;
+        let (sc, rc) = channel(100);
 
         for i in 0..self.config.threads_count {
             let part_range =
                 HttpDownloader::extract_part_range(self.config.split_result.unwrap(), i as u64);
             let client = Arc::clone(&self.client);
             let raw_url = Arc::clone(&self.raw_url);
-            let throttle_timing = Arc::clone(&throttle_timing_arc);
-            let throttle_changed = Arc::clone(&throttle_changed);
-            let barrier = Arc::clone(&barrier);
+            let sc_clone = sc.clone();
+            let task_speed = throttle_speed.unwrap_or_default() / self.config.threads_count as u64;
             handles.push(tokio::spawn(async move {
-                HttpDownloader::download_part(
-                    client,
-                    raw_url,
-                    part_range,
-                    throttle_timing,
-                    throttle_changed,
-                    barrier,
-                    i.into(),
-                )
-                .await
+                HttpDownloader::download_part(client, raw_url, part_range, task_speed, sc_clone)
+                    .await
             }));
         }
 
@@ -66,10 +46,8 @@ impl HttpDownloader {
         client: Arc<Client>,
         raw_url: Arc<String>,
         part_range: String,
-        throttle_timing: Arc<Option<(f32, f32)>>,
-        throttle_changed: Arc<AtomicBool>,
-        barrier: Arc<tokio::sync::Barrier>,
-        index: f32,
+        task_speed: u64,
+        sc: Sender<Bytes>,
     ) {
         let mut response = client
             .get(raw_url.as_str())
@@ -78,38 +56,44 @@ impl HttpDownloader {
             .await
             .unwrap();
 
-        let (throttle_delay, throttle_sleep) = throttle_timing.unwrap_or_default();
-        let is_throttled = true;
-
-        loop {
-            if throttle_changed.load(Ordering::Acquire) {
-                let wait_result = barrier.wait().await;
-                if wait_result.is_leader() {
-                    throttle_changed.store(false, Ordering::Release);
-                }
-                tokio::time::sleep(Duration::from_secs_f32(throttle_delay * index)).await;
+        let mut download_strategy;
+        if task_speed > 0 {
+            let throttle = Throttler::new(task_speed);
+            download_strategy = DownloadStrategy::Throttled {
+                sc: sc.clone(),
+                throttle,
             }
+        } else {
+            download_strategy = DownloadStrategy::NotThrottled { sc: sc.clone() }
+        }
 
-            if let Some(chunk) = response.chunk().await.unwrap() {
-            } else {
-                break;
-            }
-
-            if is_throttled {
-                tokio::time::sleep(Duration::from_secs_f32(throttle_sleep)).await;
-            }
+        while let Some(chunk) = response.chunk().await.unwrap() {
+            download_strategy.handle_chunk(chunk).await;
         }
     }
 
-    fn compute_throttle_timing(
-        threads_count: u8,
-        throttle_speed: Option<u32>,
-    ) -> Option<(f32, f32)> {
-        let throttle_speed = throttle_speed?;
-        // base_speed: 1 chunk per second per thread
-        let base_speed = CHUNK_SIZE * threads_count as usize;
-        let throttle_sleep = base_speed as f32 / throttle_speed as f32;
-        let throttle_delay = throttle_sleep / threads_count as f32;
-        Some((throttle_delay, throttle_sleep))
+    async fn process_chunk(sc: &mut Sender<Bytes>, chunk: Bytes) {
+        sc.send(chunk).await.unwrap();
+    }
+}
+
+enum DownloadStrategy {
+    NotThrottled {
+        sc: Sender<Bytes>,
+    },
+    Throttled {
+        sc: Sender<Bytes>,
+        throttle: Throttler,
+    },
+}
+
+impl DownloadStrategy {
+    async fn handle_chunk(&mut self, chunk: Bytes) {
+        match self {
+            DownloadStrategy::NotThrottled { sc } => HttpDownloader::process_chunk(sc, chunk).await,
+            DownloadStrategy::Throttled { sc, throttle } => {
+                throttle.process_throttled(sc, chunk).await
+            }
+        }
     }
 }
