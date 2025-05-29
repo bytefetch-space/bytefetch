@@ -1,13 +1,15 @@
-use super::HttpDownloaderSetupErrors;
+use std::sync::Arc;
+
+use super::{HttpDownloaderSetupErrors, throttle::ThrottleConfig};
 
 const DEFAULT_THREADS_COUNT: u8 = 8;
 const MIN_THREADS_COUNT: u8 = 1;
 const MAX_THREADS_COUNT: u8 = 64;
 
-#[derive(Debug)]
 pub(super) struct HttpDownloadConfig {
     pub(super) threads_count: u8,
     pub(super) split_result: Option<(u64, u64)>,
+    pub(super) throttle_config: Arc<ThrottleConfig>,
 }
 
 impl HttpDownloadConfig {
@@ -15,6 +17,7 @@ impl HttpDownloadConfig {
         Self {
             threads_count: 0,
             split_result: None,
+            throttle_config: Arc::new(ThrottleConfig::default()),
         }
     }
 
@@ -28,5 +31,11 @@ impl HttpDownloadConfig {
             None => DEFAULT_THREADS_COUNT,
         };
         Ok(self)
+    }
+
+    pub(super) fn set_throttle_speed(self, throttle_speed: Option<u64>) -> Self {
+        let task_speed = throttle_speed.unwrap_or_default() / self.threads_count as u64;
+        self.throttle_config.set_task_speed(task_speed);
+        self
     }
 }

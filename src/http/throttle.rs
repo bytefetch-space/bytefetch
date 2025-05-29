@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    sync::atomic::{AtomicBool, AtomicU64, Ordering},
+    time::{Duration, Instant},
+};
 
 use bytes::Bytes;
 use tokio::{sync::mpsc::Sender, time::sleep};
@@ -46,5 +49,35 @@ impl Throttler {
         }
         let elapsed_time = self.timestamp.elapsed().as_secs_f32();
         1. + additional_time - elapsed_time
+    }
+}
+
+pub struct ThrottleConfig {
+    has_throttle_changed: AtomicBool,
+    task_speed: AtomicU64,
+}
+
+impl ThrottleConfig {
+    pub(super) fn default() -> Self {
+        Self {
+            has_throttle_changed: AtomicBool::new(false),
+            task_speed: AtomicU64::new(0),
+        }
+    }
+
+    pub(super) fn set_task_speed(&self, task_speed: u64) {
+        self.task_speed.store(task_speed, Ordering::Relaxed);
+    }
+
+    pub(super) fn has_throttle_changed(&self) -> bool {
+        self.has_throttle_changed.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn reset_has_throttle_changed(&self) {
+        self.has_throttle_changed.store(false, Ordering::Relaxed);
+    }
+
+    pub(super) fn task_speed(&self) -> u64 {
+        self.task_speed.load(Ordering::Relaxed)
     }
 }

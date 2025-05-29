@@ -2,9 +2,15 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use reqwest::{Client, header::RANGE};
-use tokio::sync::mpsc::{Sender, channel};
+use tokio::sync::{
+    Barrier,
+    mpsc::{Sender, channel},
+};
 
-use super::{HttpDownloader, throttle::Throttler};
+use super::{
+    HttpDownloader,
+    throttle::{ThrottleConfig, Throttler},
+};
 
 impl HttpDownloader {
     fn extract_part_range((part_size, parts_before_decrease): (u64, u64), index: u64) -> String {
@@ -21,8 +27,8 @@ impl HttpDownloader {
 
     pub async fn start(&self) {
         let mut handles = vec![];
-        let throttle_speed: Option<u64> = None;
-        let (sc, rc) = channel(100);
+        let (sc, mut rc) = channel(100);
+        let barrier = Arc::new(Barrier::new(self.config.threads_count as usize));
 
         for i in 0..self.config.threads_count {
             let part_range =
@@ -30,12 +36,22 @@ impl HttpDownloader {
             let client = Arc::clone(&self.client);
             let raw_url = Arc::clone(&self.raw_url);
             let sc_clone = sc.clone();
-            let task_speed = throttle_speed.unwrap_or_default() / self.config.threads_count as u64;
+            let throttle_config = Arc::clone(&self.config.throttle_config);
+            let barrier = Arc::clone(&barrier);
             handles.push(tokio::spawn(async move {
-                HttpDownloader::download_part(client, raw_url, part_range, task_speed, sc_clone)
-                    .await
+                HttpDownloader::download_part(
+                    client,
+                    raw_url,
+                    part_range,
+                    throttle_config,
+                    sc_clone,
+                    barrier,
+                )
+                .await
             }));
         }
+
+        while let Some(chunk) = rc.recv().await {}
 
         for handle in handles {
             handle.await.unwrap();
@@ -46,8 +62,9 @@ impl HttpDownloader {
         client: Arc<Client>,
         raw_url: Arc<String>,
         part_range: String,
-        task_speed: u64,
+        throttle_config: Arc<ThrottleConfig>,
         sc: Sender<Bytes>,
+        barrier: Arc<Barrier>,
     ) {
         let mut response = client
             .get(raw_url.as_str())
@@ -56,19 +73,17 @@ impl HttpDownloader {
             .await
             .unwrap();
 
-        let mut download_strategy;
-        if task_speed > 0 {
-            let throttle = Throttler::new(task_speed);
-            download_strategy = DownloadStrategy::Throttled {
-                sc: sc.clone(),
-                throttle,
-            }
-        } else {
-            download_strategy = DownloadStrategy::NotThrottled { sc: sc.clone() }
-        }
+        let mut download_strategy = DownloadStrategy::new(sc.clone(), throttle_config.task_speed());
 
         while let Some(chunk) = response.chunk().await.unwrap() {
             download_strategy.handle_chunk(chunk).await;
+            if throttle_config.has_throttle_changed() {
+                download_strategy = DownloadStrategy::new(sc.clone(), throttle_config.task_speed());
+                let wait_result = barrier.wait().await;
+                if wait_result.is_leader() {
+                    throttle_config.reset_has_throttle_changed();
+                }
+            }
         }
     }
 
@@ -88,6 +103,15 @@ enum DownloadStrategy {
 }
 
 impl DownloadStrategy {
+    fn new(sc: Sender<Bytes>, task_speed: u64) -> Self {
+        if task_speed > 0 {
+            let throttle = Throttler::new(task_speed);
+            DownloadStrategy::Throttled { sc, throttle }
+        } else {
+            DownloadStrategy::NotThrottled { sc }
+        }
+    }
+
     async fn handle_chunk(&mut self, chunk: Bytes) {
         match self {
             DownloadStrategy::NotThrottled { sc } => HttpDownloader::process_chunk(sc, chunk).await,

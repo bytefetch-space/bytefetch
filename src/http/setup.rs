@@ -15,6 +15,7 @@ pub struct HttpDownloaderSetupBuilder<State = SetupBuilder> {
     client: Option<Client>,
     raw_url: Option<String>,
     threads_count: Option<u8>,
+    throttle_speed: Option<u64>,
     state: PhantomData<State>,
 }
 
@@ -26,6 +27,7 @@ impl HttpDownloaderSetupBuilder<ClientRequired> {
             raw_url: self.raw_url,
             threads_count: self.threads_count,
             state: PhantomData::<UrlRequired>,
+            throttle_speed: self.throttle_speed,
         }
     }
 }
@@ -38,6 +40,7 @@ impl HttpDownloaderSetupBuilder<UrlRequired> {
             raw_url: self.raw_url,
             threads_count: self.threads_count,
             state: PhantomData::<SetupBuilder>,
+            throttle_speed: self.throttle_speed,
         }
     }
 }
@@ -49,6 +52,7 @@ impl HttpDownloaderSetupBuilder {
             raw_url: None,
             threads_count: None,
             state: PhantomData::<ClientRequired>,
+            throttle_speed: None,
         }
     }
 
@@ -57,8 +61,19 @@ impl HttpDownloaderSetupBuilder {
         self
     }
 
+    pub fn speed_limit(mut self, kilobytes_per_second: u64) -> Self {
+        self.throttle_speed = Some(1024 * kilobytes_per_second);
+        self
+    }
+
+    fn generate_config(&self) -> Result<HttpDownloadConfig, HttpDownloaderSetupErrors> {
+        Ok(HttpDownloadConfig::default()
+            .set_thread_count(self.threads_count)?
+            .set_throttle_speed(self.throttle_speed))
+    }
+
     pub fn build(self) -> Result<HttpDownloaderSetup, HttpDownloaderSetupErrors> {
-        let config = HttpDownloadConfig::default().set_thread_count(self.threads_count)?;
+        let config = self.generate_config()?;
         Ok(HttpDownloaderSetup {
             client: self.client.unwrap(),
             raw_url: self.raw_url.unwrap(),
@@ -67,7 +82,6 @@ impl HttpDownloaderSetupBuilder {
     }
 }
 
-#[derive(Debug)]
 pub struct HttpDownloaderSetup {
     client: Client,
     raw_url: String,
