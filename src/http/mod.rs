@@ -32,9 +32,15 @@ impl HttpDownloader {
     }
 
     pub fn change_speed_limit(&self, kilobytes_per_second: Option<u64>) {
+        let throttle_speed = if kilobytes_per_second == None {
+            None
+        } else {
+            Some(kilobytes_per_second.unwrap() * 1024)
+        };
+
         self.config
             .throttle_config
-            .change_throttle_speed(kilobytes_per_second, self.config.threads_count as u64);
+            .change_throttle_speed(throttle_speed, self.config.threads_count as u64);
     }
 }
 
