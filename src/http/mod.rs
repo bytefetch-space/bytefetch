@@ -30,6 +30,12 @@ impl HttpDownloader {
     pub fn mode(self) -> HttpDownloadMode {
         self.mode
     }
+
+    pub fn change_speed_limit(&self, kilobytes_per_second: Option<u64>) {
+        self.config
+            .throttle_config
+            .change_throttle_speed(kilobytes_per_second, self.config.threads_count as u64);
+    }
 }
 
 #[derive(Debug, PartialEq)]
