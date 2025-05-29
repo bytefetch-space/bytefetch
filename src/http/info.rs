@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use reqwest::header::HeaderValue;
 
 use super::filename_utils;
@@ -7,6 +9,7 @@ pub struct HttpDownloadInfo {
     filename: String,
     content_length: Option<u64>,
     is_resumable: bool,
+    downloaded_bytes: AtomicU64,
 }
 
 impl HttpDownloadInfo {
@@ -15,6 +18,7 @@ impl HttpDownloadInfo {
             filename: String::new(),
             content_length: None,
             is_resumable: false,
+            downloaded_bytes: AtomicU64::new(0),
         }
     }
 
@@ -47,6 +51,10 @@ impl HttpDownloadInfo {
         };
         self
     }
+
+    pub(super) fn add_to_downloaded_bytes(&self, number: u64) {
+        self.downloaded_bytes.fetch_add(number, Ordering::Relaxed);
+    }
 }
 
 impl HttpDownloadInfo {
@@ -60,5 +68,9 @@ impl HttpDownloadInfo {
 
     pub fn is_resumable(&self) -> bool {
         self.is_resumable
+    }
+
+    pub fn downloaded_bytes(&self) -> u64 {
+        self.downloaded_bytes.load(Ordering::Relaxed)
     }
 }

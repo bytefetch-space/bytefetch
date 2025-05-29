@@ -51,7 +51,9 @@ impl HttpDownloader {
             }));
         }
 
-        while let Some(chunk) = rc.recv().await {}
+        while let Some(chunk) = rc.recv().await {
+            self.info.add_to_downloaded_bytes(chunk.len() as u64);
+        }
 
         for handle in handles {
             handle.await.unwrap();
