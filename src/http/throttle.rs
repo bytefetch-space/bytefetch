@@ -21,9 +21,14 @@ impl Throttler {
         }
     }
 
-    pub(super) async fn process_throttled(&mut self, sc: &mut Sender<Bytes>, chunk: Bytes) {
+    pub(super) async fn process_throttled(
+        &mut self,
+        sc: &mut Sender<(Bytes, usize)>,
+        chunk: Bytes,
+        index: &usize,
+    ) {
         self.bytes_downloaded += chunk.len() as u64;
-        sc.send(chunk).await.unwrap();
+        sc.send((chunk, *index)).await.unwrap();
 
         if self.bytes_downloaded < self.target_speed {
             return;

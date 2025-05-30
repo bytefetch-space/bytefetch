@@ -1,3 +1,4 @@
+mod bytes_aggregator;
 mod config;
 mod core;
 mod filename_utils;
