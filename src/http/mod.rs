@@ -1,6 +1,7 @@
 mod bytes_aggregator;
 mod config;
 mod core;
+mod file_writer;
 mod filename_utils;
 mod info;
 mod setup;
