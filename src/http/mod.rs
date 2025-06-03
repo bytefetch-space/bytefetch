@@ -4,6 +4,7 @@ mod core;
 mod file_writer;
 mod filename_utils;
 mod info;
+mod progress_state;
 mod setup;
 #[cfg(test)]
 mod tests;
