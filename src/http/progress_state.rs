@@ -1,10 +1,28 @@
 use std::{
-    fs::File,
-    io::{Seek, SeekFrom, Write},
+    fs::{File, OpenOptions},
+    io::{Read, Seek, SeekFrom, Write},
 };
 
 const U64_SIZE: u64 = 8;
 const STATE_EXTENSION: &str = ".bfstate";
+
+pub trait FromLeBytes<const N: usize>: Sized {
+    fn from_le_bytes(bytes: [u8; N]) -> Self;
+}
+
+macro_rules! impl_from_le_bytes {
+    ($t:ty) => {
+        impl FromLeBytes<{ std::mem::size_of::<$t>() }> for $t {
+            fn from_le_bytes(bytes: [u8; std::mem::size_of::<$t>()]) -> Self {
+                <$t>::from_le_bytes(bytes)
+            }
+        }
+    };
+}
+
+impl_from_le_bytes!(u8);
+impl_from_le_bytes!(u32);
+impl_from_le_bytes!(u64);
 
 pub(super) struct ProgressState {
     file: File,
@@ -37,6 +55,41 @@ impl ProgressState {
             progress_offset,
             segment_offsets: download_offsets,
         }
+    }
+
+    pub(super) fn load(filename: String, url: &mut String) -> Self {
+        let mut file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(filename + STATE_EXTENSION)
+            .unwrap();
+
+        let url_len: u32 = ProgressState::read_le_int(&mut file);
+        let mut url_bytes = vec![0u8; url_len as usize];
+        file.read_exact(&mut url_bytes).unwrap();
+        *url = String::from_utf8(url_bytes).unwrap();
+
+        let tasks_count: u8 = ProgressState::read_le_int(&mut file);
+        let mut segment_offsets = Vec::with_capacity(tasks_count as usize);
+
+        for _ in 0..tasks_count {
+            let offset: u64 = ProgressState::read_le_int(&mut file);
+            segment_offsets.push(offset);
+        }
+
+        let progress_offset = 4 + url_len as u64 + 1;
+
+        Self {
+            file,
+            progress_offset,
+            segment_offsets,
+        }
+    }
+
+    fn read_le_int<T: FromLeBytes<N>, const N: usize>(file: &mut File) -> T {
+        let mut bytes = [0u8; N];
+        file.read_exact(&mut bytes).unwrap();
+        T::from_le_bytes(bytes)
     }
 
     pub(super) fn update_progress(&mut self, index: usize, written_bytes: u64) {
