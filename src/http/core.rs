@@ -1,10 +1,13 @@
-use std::{sync::Arc, vec};
+use std::{
+    sync::{self, Arc},
+    vec,
+};
 
 use bytes::Bytes;
 use reqwest::{Client, header::RANGE};
 use tokio::sync::{
     Barrier,
-    mpsc::{Receiver, Sender, channel},
+    mpsc::{Sender, channel},
 };
 
 use crate::http::progress_state::ProgressState;
@@ -15,6 +18,9 @@ use super::{
     file_writer::FileWriter,
     throttle::{ThrottleConfig, Throttler},
 };
+
+type StdSender<T> = std::sync::mpsc::Sender<T>;
+type StdReceiver<T> = std::sync::mpsc::Receiver<T>;
 
 impl HttpDownloader {
     fn calculate_part_range(
@@ -69,28 +75,28 @@ impl HttpDownloader {
         }
         drop(sc);
 
-        let (write_tx, write_rx) = channel(16);
+        let (write_tx, write_rx) = sync::mpsc::channel();
 
-        let writer_handle = tokio::spawn(HttpDownloader::file_writer(
-            write_rx,
-            self.info.filename().to_string(),
-            (*self.raw_url).clone(),
-            self.config.threads_count,
-            download_offsets,
-        ));
+        let filename = self.info.filename().to_string();
+        let raw_url = (*self.raw_url).clone();
+        let task_count = self.config.threads_count;
+        let writer = move || {
+            HttpDownloader::file_writer(write_rx, filename, raw_url, task_count, download_offsets)
+        };
+        let writer_handle = tokio::task::spawn_blocking(writer);
 
-        let write_size = 1024 * 512;
+        let write_size = 1024 * 32;
         while let Some((chunk, index)) = rc.recv().await {
             self.info.add_to_downloaded_bytes(chunk.len() as u64);
             aggregators[index].push(chunk);
             if aggregators[index].len() >= write_size {
-                HttpDownloader::flush_to_writer(&write_tx, &mut aggregators[index], index).await;
+                HttpDownloader::flush_to_writer(&write_tx, &mut aggregators[index], index);
             }
         }
 
         for index in 0..self.config.threads_count as usize {
             if aggregators[index].len() > 0 {
-                HttpDownloader::flush_to_writer(&write_tx, &mut aggregators[index], index).await;
+                HttpDownloader::flush_to_writer(&write_tx, &mut aggregators[index], index);
             }
         }
 
@@ -132,28 +138,29 @@ impl HttpDownloader {
         sc.send((chunk, *index)).await.unwrap();
     }
 
-    async fn flush_to_writer(
-        write_tx: &Sender<(usize, u64, Bytes)>,
+    fn flush_to_writer(
+        write_tx: &StdSender<(usize, u64, Bytes)>,
         aggregator: &mut BytesAggregator,
         index: usize,
     ) {
         let offset = aggregator.start_seek();
         let buffer = aggregator.merge_all();
-        write_tx.send((index, offset, buffer)).await.unwrap();
+        write_tx.send((index, offset, buffer)).unwrap();
     }
 
-    async fn file_writer(
-        mut write_rx: Receiver<(usize, u64, Bytes)>,
+    fn file_writer(
+        write_rx: StdReceiver<(usize, u64, Bytes)>,
         filename: String,
         url: String,
         tasks_count: u8,
         download_offsets: Vec<u64>,
     ) {
-        let mut file = FileWriter::new(&filename).await;
+        let mut file = FileWriter::new(&filename);
         let mut state = ProgressState::new(filename, url, tasks_count, download_offsets);
-        while let Some((index, offset, buffer)) = write_rx.recv().await {
+        while let Ok((index, offset, buffer)) = write_rx.recv() {
+            println!("{}", index);
             let written_bytes = buffer.len() as u64;
-            file.write_at(offset, buffer).await;
+            file.write_at(offset, buffer);
             state.update_progress(index, written_bytes);
         }
     }
