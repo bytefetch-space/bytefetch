@@ -65,14 +65,15 @@ impl ProgressState {
     }
 
     pub(super) fn load(
-        filename: String,
+        filename: &str,
         url: &mut String,
         content_length: &mut Option<u64>,
+        tasks_count: &mut u8,
     ) -> Self {
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
-            .open(filename + STATE_EXTENSION)
+            .open(filename.to_string() + STATE_EXTENSION)
             .unwrap();
 
         let (url_serialized_size, deserialized_url) = ProgressState::read_string(&mut file);
@@ -81,10 +82,10 @@ impl ProgressState {
             ProgressState::read_option_u64(&mut file);
         *content_length = deserialized_content_length;
 
-        let tasks_count: u8 = ProgressState::read_le_int(&mut file);
-        let mut segment_offsets = Vec::with_capacity(tasks_count as usize);
+        *tasks_count = ProgressState::read_le_int(&mut file);
+        let mut segment_offsets = Vec::with_capacity(*tasks_count as usize);
 
-        for _ in 0..tasks_count {
+        for _ in 0..*tasks_count {
             let offset: u64 = ProgressState::read_le_int(&mut file);
             segment_offsets.push(offset);
         }
@@ -157,5 +158,9 @@ impl ProgressState {
             .write_all(&self.segment_offsets[index].to_le_bytes())
             .unwrap();
         self.file.flush().unwrap();
+    }
+
+    pub(super) fn get_progress(&self, index: usize) -> u64 {
+        self.segment_offsets[index]
     }
 }

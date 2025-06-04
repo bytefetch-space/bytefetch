@@ -23,7 +23,7 @@ type StdSender<T> = std::sync::mpsc::Sender<T>;
 type StdReceiver<T> = std::sync::mpsc::Receiver<T>;
 
 impl HttpDownloader {
-    fn calculate_part_range(
+    pub(super) fn calculate_part_range(
         (part_size, parts_before_decrease): (u64, u64),
         index: u64,
     ) -> (u64, u64) {

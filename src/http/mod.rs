@@ -1,8 +1,10 @@
+mod builder_utils;
 mod bytes_aggregator;
 mod config;
 mod core;
 mod file_writer;
 mod filename_utils;
+mod from_state;
 mod info;
 mod progress_state;
 mod setup;
@@ -10,12 +12,12 @@ mod setup;
 mod tests;
 mod throttle;
 
-use std::sync::Arc;
-
+use crate::http::{from_state::HttpDownloaderFromStateBuilder, progress_state::ProgressState};
 use config::HttpDownloadConfig;
 use info::HttpDownloadInfo;
 use reqwest::Client;
-use setup::{ClientRequired, HttpDownloaderSetupBuilder};
+use setup::HttpDownloaderSetupBuilder;
+use std::sync::Arc;
 
 pub struct HttpDownloader {
     client: Arc<Client>,
@@ -26,8 +28,14 @@ pub struct HttpDownloader {
 }
 
 impl HttpDownloader {
-    pub fn setup() -> HttpDownloaderSetupBuilder<ClientRequired> {
+    pub fn setup() -> HttpDownloaderSetupBuilder<setup::ClientRequired> {
         HttpDownloaderSetupBuilder::default()
+    }
+
+    pub fn from_state(
+        filename: &str,
+    ) -> HttpDownloaderFromStateBuilder<from_state::ClientRequired> {
+        HttpDownloaderFromStateBuilder::new(String::from(filename))
     }
 
     pub fn mode(self) -> HttpDownloadMode {

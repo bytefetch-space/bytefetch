@@ -1,6 +1,6 @@
-use crate::http::config::HttpDownloadConfig;
+use crate::http::{builder_utils, config::HttpDownloadConfig};
 
-use super::{HttpDownloadMode, HttpDownloader, HttpDownloaderSetupErrors, info::HttpDownloadInfo};
+use super::{HttpDownloader, HttpDownloaderSetupErrors, info::HttpDownloadInfo};
 
 use reqwest::{
     Client,
@@ -103,53 +103,13 @@ impl HttpDownloaderSetup {
             .extract_and_set_is_resumable(accept_ranges)
     }
 
-    fn determine_mode(&self, info: &HttpDownloadInfo) -> HttpDownloadMode {
-        match (
-            self.config.threads_count,
-            info.content_length(),
-            info.is_resumable(),
-        ) {
-            (_, _, false) => return HttpDownloadMode::NonResumable,
-            (_, None, true) | (1, _, true) => return HttpDownloadMode::ResumableStream,
-            (_, _, true) => return HttpDownloadMode::ResumableMultithread,
-        }
-    }
-
-    fn split_content(content_length: u64, thread_number: u64) -> (u64, u64) {
-        let mut remainder = content_length % thread_number;
-        let mut part_size = content_length / thread_number;
-        if remainder > 0 {
-            part_size += 1
-        } else {
-            remainder = thread_number
-        }
-        (part_size, remainder) // Example: split_content(1003, 4) returns (251, 3), meaning 3 parts are 251 bytes and 1 part is 250 bytes
-    }
-
-    fn try_split_content(
-        mode: &HttpDownloadMode,
-        content_length: &Option<u64>,
-        threads_count: u8,
-    ) -> Option<(u64, u64)> {
-        if *mode == HttpDownloadMode::NonResumable || *mode == HttpDownloadMode::ResumableStream {
-            return None;
-        }
-        Some(HttpDownloaderSetup::split_content(
-            content_length.unwrap(),
-            threads_count as u64,
-        ))
-    }
-
     pub async fn init(self) -> HttpDownloader {
         let headers_response = self.get_headers().await.unwrap();
         let info = self.generate_info(headers_response);
-        let mode = self.determine_mode(&info);
+        let mode = builder_utils::determine_mode(self.config.threads_count, &info);
         let mut config = self.config;
-        config.split_result = HttpDownloaderSetup::try_split_content(
-            &mode,
-            info.content_length(),
-            config.threads_count,
-        );
+        config.split_result =
+            builder_utils::try_split_content(&mode, info.content_length(), config.threads_count);
         HttpDownloader {
             client: Arc::new(self.client),
             raw_url: Arc::new(self.raw_url),

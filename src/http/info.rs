@@ -31,6 +31,11 @@ impl HttpDownloadInfo {
         self
     }
 
+    pub(super) fn set_filename(mut self, filename: String) -> Self {
+        self.filename = filename;
+        self
+    }
+
     pub(super) fn extract_and_set_content_length(
         mut self,
         content_length: &Option<&HeaderValue>,
@@ -38,6 +43,11 @@ impl HttpDownloadInfo {
         self.content_length = content_length
             .and_then(|v| v.to_str().ok())
             .and_then(|s| s.parse::<u64>().ok());
+        self
+    }
+
+    pub(super) fn set_content_length(mut self, content_length: Option<u64>) -> Self {
+        self.content_length = content_length;
         self
     }
 
@@ -49,6 +59,11 @@ impl HttpDownloadInfo {
             Some(value) => value.to_str().map_or(false, |s| s == "bytes"),
             None => false,
         };
+        self
+    }
+
+    pub(super) fn set_is_resumable(mut self, is_resumable: bool) -> Self {
+        self.is_resumable = is_resumable;
         self
     }
 
