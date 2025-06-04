@@ -158,7 +158,6 @@ impl HttpDownloader {
         let mut file = FileWriter::new(&filename);
         let mut state = ProgressState::new(filename, url, tasks_count, download_offsets);
         while let Ok((index, offset, buffer)) = write_rx.recv() {
-            println!("{}", index);
             let written_bytes = buffer.len() as u64;
             file.write_at(offset, buffer);
             state.update_progress(index, written_bytes);
