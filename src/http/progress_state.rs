@@ -40,19 +40,22 @@ impl ProgressState {
     pub(super) fn new(
         filename: String,
         url: String,
+        content_length: Option<u64>,
         tasks_count: u8,
         download_offsets: Vec<u64>,
     ) -> Self {
         let mut file = File::create(filename + STATE_EXTENSION).unwrap();
 
         let url_serialized_size = ProgressState::write_string(&mut file, url); // 4 + N Bytes
-        ProgressState::write_le_int(&mut file, tasks_count); // 1 Byte
+        let content_length_serialized_size =
+            ProgressState::write_option_u64(&mut file, content_length); // 1(None) or 9(Value) Bytes 
 
+        ProgressState::write_le_int(&mut file, tasks_count); // 1 Byte
         for offset in &download_offsets {
             ProgressState::write_le_int(&mut file, *offset); // 8 Bytes
         }
 
-        let progress_offset = url_serialized_size + 1;
+        let progress_offset = url_serialized_size + content_length_serialized_size + 1;
 
         Self {
             file,
@@ -61,7 +64,11 @@ impl ProgressState {
         }
     }
 
-    pub(super) fn load(filename: String, url: &mut String) -> Self {
+    pub(super) fn load(
+        filename: String,
+        url: &mut String,
+        content_length: &mut Option<u64>,
+    ) -> Self {
         let mut file = OpenOptions::new()
             .read(true)
             .write(true)
@@ -70,6 +77,9 @@ impl ProgressState {
 
         let (url_serialized_size, deserialized_url) = ProgressState::read_string(&mut file);
         *url = deserialized_url;
+        let (content_length_serialized_size, deserialized_content_length) =
+            ProgressState::read_option_u64(&mut file);
+        *content_length = deserialized_content_length;
 
         let tasks_count: u8 = ProgressState::read_le_int(&mut file);
         let mut segment_offsets = Vec::with_capacity(tasks_count as usize);
@@ -79,7 +89,7 @@ impl ProgressState {
             segment_offsets.push(offset);
         }
 
-        let progress_offset = url_serialized_size + 1;
+        let progress_offset = url_serialized_size + content_length_serialized_size + 1;
 
         Self {
             file,
@@ -111,6 +121,32 @@ impl ProgressState {
         file.read_exact(&mut url_bytes).unwrap();
         let url = String::from_utf8(url_bytes).unwrap();
         (4 + url.len() as u64, url)
+    }
+
+    fn write_option_u64(file: &mut File, val: Option<u64>) -> u64 {
+        match val {
+            Some(v) => {
+                file.write_all(&[1]).unwrap();
+                ProgressState::write_le_int(file, v);
+                return 9;
+            }
+            None => {
+                file.write_all(&[0]).unwrap();
+                return 1;
+            }
+        }
+    }
+
+    fn read_option_u64(file: &mut File) -> (u64, Option<u64>) {
+        let mut flag = [0u8; 1];
+        file.read_exact(&mut flag).unwrap();
+
+        match flag[0] {
+            1 => {
+                return (9, Some(ProgressState::read_le_int(file)));
+            }
+            _ => return (1, None),
+        }
     }
 
     pub(super) fn update_progress(&mut self, index: usize, written_bytes: u64) {

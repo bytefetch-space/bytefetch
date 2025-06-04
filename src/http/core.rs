@@ -80,8 +80,16 @@ impl HttpDownloader {
         let filename = self.info.filename().to_string();
         let raw_url = (*self.raw_url).clone();
         let task_count = self.config.threads_count;
+        let content_length = *self.info.content_length();
         let writer = move || {
-            HttpDownloader::file_writer(write_rx, filename, raw_url, task_count, download_offsets)
+            HttpDownloader::file_writer(
+                write_rx,
+                filename,
+                raw_url,
+                content_length,
+                task_count,
+                download_offsets,
+            )
         };
         let writer_handle = tokio::task::spawn_blocking(writer);
 
@@ -152,11 +160,13 @@ impl HttpDownloader {
         write_rx: StdReceiver<(usize, u64, Bytes)>,
         filename: String,
         url: String,
+        content_length: Option<u64>,
         tasks_count: u8,
         download_offsets: Vec<u64>,
     ) {
         let mut file = FileWriter::new(&filename);
-        let mut state = ProgressState::new(filename, url, tasks_count, download_offsets);
+        let mut state =
+            ProgressState::new(filename, url, content_length, tasks_count, download_offsets);
         while let Ok((index, offset, buffer)) = write_rx.recv() {
             let written_bytes = buffer.len() as u64;
             file.write_at(offset, buffer);
