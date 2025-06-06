@@ -38,13 +38,13 @@ pub(super) struct ProgressState {
 
 impl ProgressState {
     pub(super) fn new(
-        filename: String,
+        filename: &str,
         url: String,
         content_length: Option<u64>,
         tasks_count: u8,
         download_offsets: Vec<u64>,
     ) -> Self {
-        let mut file = File::create(filename + STATE_EXTENSION).unwrap();
+        let mut file = File::create(filename.to_string() + STATE_EXTENSION).unwrap();
 
         let url_serialized_size = ProgressState::write_string(&mut file, url); // 4 + N Bytes
         let content_length_serialized_size =

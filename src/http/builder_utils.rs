@@ -29,3 +29,18 @@ pub(super) fn determine_mode(threads_count: u8, info: &HttpDownloadInfo) -> Http
         (_, _, true) => return HttpDownloadMode::ResumableMultithread,
     }
 }
+
+pub(super) fn calculate_part_range(
+    (part_size, parts_before_decrease): (u64, u64),
+    index: u64,
+) -> (u64, u64) {
+    let mut start = index * part_size;
+    let mut end = (index + 1) * part_size - 1;
+    if index > parts_before_decrease {
+        start -= index - parts_before_decrease;
+    }
+    if index >= parts_before_decrease {
+        end -= index - parts_before_decrease + 1;
+    }
+    (start, end)
+}

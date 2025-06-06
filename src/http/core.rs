@@ -23,21 +23,6 @@ type StdSender<T> = std::sync::mpsc::Sender<T>;
 type StdReceiver<T> = std::sync::mpsc::Receiver<T>;
 
 impl HttpDownloader {
-    pub(super) fn calculate_part_range(
-        (part_size, parts_before_decrease): (u64, u64),
-        index: u64,
-    ) -> (u64, u64) {
-        let mut start = index * part_size;
-        let mut end = (index + 1) * part_size - 1;
-        if index > parts_before_decrease {
-            start -= index - parts_before_decrease;
-        }
-        if index >= parts_before_decrease {
-            end -= index - parts_before_decrease + 1;
-        }
-        (start, end)
-    }
-
     fn extract_part_range((start, end): (u64, u64)) -> String {
         format!("bytes={}-{}", start, end)
     }
@@ -48,9 +33,8 @@ impl HttpDownloader {
         let mut aggregators = vec![];
         let mut download_offsets = vec![];
 
-        for i in 0..self.config.threads_count {
-            let (start, end) =
-                HttpDownloader::calculate_part_range(self.config.split_result.unwrap(), i as u64);
+        for i in 0..self.config.threads_count as usize {
+            let (start, end) = self.byte_ranges[i];
             let part_range = HttpDownloader::extract_part_range((start, end));
             aggregators.push(BytesAggregator::new(start));
             download_offsets.push(start);
@@ -68,7 +52,7 @@ impl HttpDownloader {
                     throttle_config,
                     sc_clone,
                     barrier,
-                    i as usize,
+                    i,
                 )
                 .await
             });
@@ -77,20 +61,15 @@ impl HttpDownloader {
 
         let (write_tx, write_rx) = sync::mpsc::channel();
 
-        let filename = self.info.filename().to_string();
-        let raw_url = (*self.raw_url).clone();
-        let task_count = self.config.threads_count;
-        let content_length = *self.info.content_length();
-        let writer = move || {
-            HttpDownloader::file_writer(
-                write_rx,
-                filename,
-                raw_url,
-                content_length,
-                task_count,
-                download_offsets,
-            )
-        };
+        let file = FileWriter::open(self.info.filename(), self.config.is_new);
+        let state = ProgressState::new(
+            self.info.filename(),
+            (*self.raw_url).clone(),
+            *self.info.content_length(),
+            self.config.threads_count,
+            download_offsets,
+        );
+        let writer = move || HttpDownloader::file_writer(write_rx, file, state);
         let writer_handle = tokio::task::spawn_blocking(writer);
 
         let write_size = 1024 * 32;
@@ -158,15 +137,9 @@ impl HttpDownloader {
 
     fn file_writer(
         write_rx: StdReceiver<(usize, u64, Bytes)>,
-        filename: String,
-        url: String,
-        content_length: Option<u64>,
-        tasks_count: u8,
-        download_offsets: Vec<u64>,
+        mut file: FileWriter,
+        mut state: ProgressState,
     ) {
-        let mut file = FileWriter::new(&filename);
-        let mut state =
-            ProgressState::new(filename, url, content_length, tasks_count, download_offsets);
         while let Ok((index, offset, buffer)) = write_rx.recv() {
             let written_bytes = buffer.len() as u64;
             file.write_at(offset, buffer);

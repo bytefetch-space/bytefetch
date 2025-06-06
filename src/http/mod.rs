@@ -25,6 +25,7 @@ pub struct HttpDownloader {
     pub info: HttpDownloadInfo,
     pub mode: HttpDownloadMode,
     config: HttpDownloadConfig,
+    byte_ranges: Vec<(u64, u64)>,
 }
 
 impl HttpDownloader {

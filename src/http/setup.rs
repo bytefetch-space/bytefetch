@@ -103,6 +103,17 @@ impl HttpDownloaderSetup {
             .extract_and_set_is_resumable(accept_ranges)
     }
 
+    fn generate_byte_ranges(config: &HttpDownloadConfig) -> Vec<(u64, u64)> {
+        let mut byte_ranges = vec![];
+        for index in 0..config.threads_count as u64 {
+            byte_ranges.push(builder_utils::calculate_part_range(
+                config.split_result.unwrap(),
+                index,
+            ));
+        }
+        byte_ranges
+    }
+
     pub async fn init(self) -> HttpDownloader {
         let headers_response = self.get_headers().await.unwrap();
         let info = self.generate_info(headers_response);
@@ -115,6 +126,7 @@ impl HttpDownloaderSetup {
             raw_url: Arc::new(self.raw_url),
             info,
             mode,
+            byte_ranges: HttpDownloaderSetup::generate_byte_ranges(&config),
             config,
         }
     }

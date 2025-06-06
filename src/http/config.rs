@@ -10,6 +10,7 @@ pub(super) struct HttpDownloadConfig {
     pub(super) threads_count: u8,
     pub(super) split_result: Option<(u64, u64)>,
     pub(super) throttle_config: Arc<ThrottleConfig>,
+    pub(super) is_new: bool,
 }
 
 impl HttpDownloadConfig {
@@ -18,6 +19,7 @@ impl HttpDownloadConfig {
             threads_count: 0,
             split_result: None,
             throttle_config: Arc::new(ThrottleConfig::default()),
+            is_new: true,
         }
     }
 
@@ -36,6 +38,11 @@ impl HttpDownloadConfig {
     pub(super) fn set_throttle_speed(self, throttle_speed: Option<u64>) -> Self {
         let task_speed = throttle_speed.unwrap_or_default() / self.threads_count as u64;
         self.throttle_config.set_task_speed(task_speed);
+        self
+    }
+
+    pub(super) fn mark_resumed(mut self) -> Self {
+        self.is_new = false;
         self
     }
 }

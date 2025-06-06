@@ -1,5 +1,5 @@
 use std::{
-    fs::File,
+    fs::{File, OpenOptions},
     io::{Seek, SeekFrom, Write},
 };
 
@@ -10,9 +10,23 @@ pub(super) struct FileWriter {
 }
 
 impl FileWriter {
-    pub(super) fn new(filename: &str) -> Self {
+    fn new(filename: &str) -> Self {
         Self {
             file: File::create(filename).unwrap(),
+        }
+    }
+
+    fn from(filename: &str) -> Self {
+        Self {
+            file: OpenOptions::new().write(true).open(filename).unwrap(),
+        }
+    }
+
+    pub(super) fn open(filename: &str, is_new: bool) -> Self {
+        if is_new {
+            Self::new(filename)
+        } else {
+            Self::from(filename)
         }
     }
 
