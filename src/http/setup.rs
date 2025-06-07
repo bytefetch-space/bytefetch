@@ -14,7 +14,7 @@ pub struct SetupBuilder;
 pub struct HttpDownloaderSetupBuilder<State = SetupBuilder> {
     client: Option<Client>,
     raw_url: Option<String>,
-    threads_count: Option<u8>,
+    tasks_count: Option<u8>,
     throttle_speed: Option<u64>,
     state: PhantomData<State>,
 }
@@ -25,7 +25,7 @@ impl HttpDownloaderSetupBuilder<ClientRequired> {
         HttpDownloaderSetupBuilder {
             client: self.client,
             raw_url: self.raw_url,
-            threads_count: self.threads_count,
+            tasks_count: self.tasks_count,
             state: PhantomData::<UrlRequired>,
             throttle_speed: self.throttle_speed,
         }
@@ -38,7 +38,7 @@ impl HttpDownloaderSetupBuilder<UrlRequired> {
         HttpDownloaderSetupBuilder {
             client: self.client,
             raw_url: self.raw_url,
-            threads_count: self.threads_count,
+            tasks_count: self.tasks_count,
             state: PhantomData::<SetupBuilder>,
             throttle_speed: self.throttle_speed,
         }
@@ -50,14 +50,14 @@ impl HttpDownloaderSetupBuilder {
         HttpDownloaderSetupBuilder::<ClientRequired> {
             client: None,
             raw_url: None,
-            threads_count: None,
+            tasks_count: None,
             state: PhantomData::<ClientRequired>,
             throttle_speed: None,
         }
     }
 
-    pub fn threads_count(mut self, count: u8) -> Self {
-        self.threads_count = Some(count);
+    pub fn tasks_count(mut self, count: u8) -> Self {
+        self.tasks_count = Some(count);
         self
     }
 
@@ -68,7 +68,7 @@ impl HttpDownloaderSetupBuilder {
 
     fn generate_config(&self) -> Result<HttpDownloadConfig, HttpDownloaderSetupErrors> {
         Ok(HttpDownloadConfig::default()
-            .set_thread_count(self.threads_count)?
+            .set_thread_count(self.tasks_count)?
             .set_throttle_speed(self.throttle_speed))
     }
 
@@ -105,7 +105,7 @@ impl HttpDownloaderSetup {
 
     fn generate_byte_ranges(config: &HttpDownloadConfig) -> Vec<(u64, u64)> {
         let mut byte_ranges = vec![];
-        for index in 0..config.threads_count as u64 {
+        for index in 0..config.tasks_count as u64 {
             byte_ranges.push(builder_utils::calculate_part_range(
                 config.split_result.unwrap(),
                 index,
@@ -117,10 +117,10 @@ impl HttpDownloaderSetup {
     pub async fn init(self) -> HttpDownloader {
         let headers_response = self.get_headers().await.unwrap();
         let info = self.generate_info(headers_response);
-        let mode = builder_utils::determine_mode(self.config.threads_count, &info);
+        let mode = builder_utils::determine_mode(self.config.tasks_count, &info);
         let mut config = self.config;
         config.split_result =
-            builder_utils::try_split_content(&mode, info.content_length(), config.threads_count);
+            builder_utils::try_split_content(&mode, info.content_length(), config.tasks_count);
         HttpDownloader {
             client: Arc::new(self.client),
             raw_url: Arc::new(self.raw_url),

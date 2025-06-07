@@ -14,16 +14,16 @@ fn split_content(content_length: u64, thread_number: u64) -> (u64, u64) {
 pub(super) fn try_split_content(
     mode: &HttpDownloadMode,
     content_length: &Option<u64>,
-    threads_count: u8,
+    tasks_count: u8,
 ) -> Option<(u64, u64)> {
     if *mode == HttpDownloadMode::NonResumable || *mode == HttpDownloadMode::ResumableStream {
         return None;
     }
-    Some(split_content(content_length.unwrap(), threads_count as u64))
+    Some(split_content(content_length.unwrap(), tasks_count as u64))
 }
 
-pub(super) fn determine_mode(threads_count: u8, info: &HttpDownloadInfo) -> HttpDownloadMode {
-    match (threads_count, info.content_length(), info.is_resumable()) {
+pub(super) fn determine_mode(tasks_count: u8, info: &HttpDownloadInfo) -> HttpDownloadMode {
+    match (tasks_count, info.content_length(), info.is_resumable()) {
         (_, _, false) => return HttpDownloadMode::NonResumable,
         (_, None, true) | (1, _, true) => return HttpDownloadMode::ResumableStream,
         (_, _, true) => return HttpDownloadMode::ResumableMultithread,

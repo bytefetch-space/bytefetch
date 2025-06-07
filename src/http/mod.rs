@@ -52,7 +52,7 @@ impl HttpDownloader {
 
         self.config
             .throttle_config
-            .change_throttle_speed(throttle_speed, self.config.threads_count as u64);
+            .change_throttle_speed(throttle_speed, self.config.tasks_count as u64);
     }
 }
 

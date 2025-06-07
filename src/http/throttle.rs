@@ -86,8 +86,8 @@ impl ThrottleConfig {
         self.task_speed.load(Ordering::Relaxed)
     }
 
-    pub(super) fn change_throttle_speed(&self, throttle_speed: Option<u64>, threads_count: u64) {
-        let task_speed = throttle_speed.unwrap_or_default() / threads_count;
+    pub(super) fn change_throttle_speed(&self, throttle_speed: Option<u64>, tasks_count: u64) {
+        let task_speed = throttle_speed.unwrap_or_default() / tasks_count;
         self.task_speed.store(task_speed, Ordering::Relaxed);
         self.has_throttle_changed.store(true, Ordering::Relaxed);
     }

@@ -52,7 +52,7 @@ impl HttpDownloaderFromStateBuilder {
     ) -> (Vec<(u64, u64)>, u64) {
         let mut byte_ranges = vec![];
         let mut downloaded_bytes = 0;
-        for index in 0..config.threads_count as usize {
+        for index in 0..config.tasks_count as usize {
             let (start, end) =
                 builder_utils::calculate_part_range(config.split_result.unwrap(), index as u64);
             let start_offset = state.get_progress(index);

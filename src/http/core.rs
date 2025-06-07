@@ -29,11 +29,11 @@ impl HttpDownloader {
 
     pub async fn start(&self) {
         let (sc, mut rc) = channel(512);
-        let barrier = Arc::new(Barrier::new(self.config.threads_count as usize));
+        let barrier = Arc::new(Barrier::new(self.config.tasks_count as usize));
         let mut aggregators = vec![];
         let mut download_offsets = vec![];
 
-        for i in 0..self.config.threads_count as usize {
+        for i in 0..self.config.tasks_count as usize {
             let (start, end) = self.byte_ranges[i];
             let part_range = HttpDownloader::extract_part_range((start, end));
             aggregators.push(BytesAggregator::new(start));
@@ -66,7 +66,7 @@ impl HttpDownloader {
             self.info.filename(),
             (*self.raw_url).clone(),
             *self.info.content_length(),
-            self.config.threads_count,
+            self.config.tasks_count,
             download_offsets,
         );
         let writer = move || HttpDownloader::file_writer(write_rx, file, state);
@@ -81,7 +81,7 @@ impl HttpDownloader {
             }
         }
 
-        for index in 0..self.config.threads_count as usize {
+        for index in 0..self.config.tasks_count as usize {
             if aggregators[index].len() > 0 {
                 HttpDownloader::flush_to_writer(&write_tx, &mut aggregators[index], index);
             }
