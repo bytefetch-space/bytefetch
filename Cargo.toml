@@ -2,6 +2,12 @@
 name = "bytefetch"
 version = "0.1.0"
 edition = "2024"
+description = "A Rust library that makes HTTP file downloads easier to implement."
+license = "MIT"
+repository = "https://github.com/bytefetch-space/bytefetch"
+readme = "README.md"
+keywords = ["download", "downloader", "http", "tokio"]
+categories = ["network-programming", "asynchronous", "concurrency"]
 
 [dependencies]
 reqwest = "0.12.15"
