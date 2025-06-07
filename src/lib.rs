@@ -7,5 +7,3 @@
 //! The current version is an early release to reserve the crate name on [crates.io](https://crates.io/crates/bytefetch).
 mod http;
 pub use http::{HttpDownloader, HttpDownloaderSetupErrors};
-mod manager;
-pub use manager::DownloadManager;

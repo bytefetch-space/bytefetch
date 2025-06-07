@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::HttpDownloader;
 
-pub struct DownloadManager {
+struct DownloadManager {
     pub downloads: HashMap<Uuid, Arc<HttpDownloader>>,
 }
 
