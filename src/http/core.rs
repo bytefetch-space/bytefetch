@@ -4,7 +4,7 @@ use std::{
 };
 
 use bytes::Bytes;
-use reqwest::Client;
+use reqwest::Response;
 use tokio::sync::{
     Barrier,
     mpsc::{Sender, channel},
@@ -38,23 +38,18 @@ impl HttpDownloader {
             let part_range = HttpDownloader::extract_part_range((start, end));
             aggregators.push(BytesAggregator::new(start));
             download_offsets.push(start);
-
-            let client = Arc::clone(&self.client);
-            let raw_url = Arc::clone(&self.raw_url);
             let sc_clone = sc.clone();
             let throttle_config = Arc::clone(&self.config.throttle_config);
             let barrier = Arc::clone(&barrier);
-            tokio::spawn(async move {
-                HttpDownloader::download_part(
-                    client,
-                    raw_url,
-                    part_range,
-                    throttle_config,
-                    sc_clone,
-                    barrier,
-                    i,
-                )
+            let response = self
+                .client
+                .get(self.raw_url.as_str())
+                .with_range(part_range)
+                .send()
                 .await
+                .unwrap();
+            tokio::spawn(async move {
+                HttpDownloader::download_part(response, throttle_config, sc_clone, barrier, i).await
             });
         }
         drop(sc);
@@ -92,21 +87,12 @@ impl HttpDownloader {
     }
 
     async fn download_part(
-        client: Arc<Client>,
-        raw_url: Arc<String>,
-        part_range: String,
+        mut response: Response,
         throttle_config: Arc<ThrottleConfig>,
         sc: Sender<(Bytes, usize)>,
         barrier: Arc<Barrier>,
         index: usize,
     ) {
-        let mut response = client
-            .get(raw_url.as_str())
-            .with_range(part_range)
-            .send()
-            .await
-            .unwrap();
-
         let mut download_strategy = DownloadStrategy::new(sc.clone(), throttle_config.task_speed());
 
         while let Some(chunk) = response.chunk().await.unwrap() {
