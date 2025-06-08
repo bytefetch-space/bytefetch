@@ -7,6 +7,7 @@ mod filename_utils;
 mod from_state;
 mod info;
 mod progress_state;
+mod request_utils;
 mod setup;
 #[cfg(test)]
 mod tests;

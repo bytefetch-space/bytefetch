@@ -4,13 +4,13 @@ use std::{
 };
 
 use bytes::Bytes;
-use reqwest::{Client, header::RANGE};
+use reqwest::Client;
 use tokio::sync::{
     Barrier,
     mpsc::{Sender, channel},
 };
 
-use crate::http::progress_state::ProgressState;
+use crate::http::{progress_state::ProgressState, request_utils::RequestBuilderExt};
 
 use super::{
     HttpDownloader,
@@ -102,7 +102,7 @@ impl HttpDownloader {
     ) {
         let mut response = client
             .get(raw_url.as_str())
-            .header(RANGE, part_range)
+            .with_range(part_range)
             .send()
             .await
             .unwrap();
