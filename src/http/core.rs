@@ -41,11 +41,8 @@ impl HttpDownloader {
             let part_range = HttpDownloader::extract_part_range((start, end));
             aggregators.push(BytesAggregator::new(start));
             download_offsets.push(start);
-            let response = basic_request(&self.client, &self.raw_url)
-                .with_range(part_range)
-                .send()
-                .await
-                .unwrap();
+            let request = basic_request(&self.client, &self.raw_url).with_range(part_range);
+            let response = request.send().await.unwrap();
             self.spawn_download_task(response, &sc, &barrier, index);
         }
         drop(sc);
