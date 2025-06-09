@@ -35,7 +35,7 @@ impl HttpDownloader {
     }
 
     pub async fn start(&self) {
-        let (sc, mut rc) = channel(512);
+        let (download_tx, mut download_rx) = channel(512);
         let barrier = Arc::new(Barrier::new(self.config.tasks_count as usize));
         let mut aggregators = vec![];
         let mut download_offsets = vec![];
@@ -47,9 +47,9 @@ impl HttpDownloader {
             download_offsets.push(start);
             let request = basic_request(&self.client, &self.raw_url).with_range(part_range);
             let response = request.send().await.unwrap();
-            self.spawn_download_task(response, &sc, &barrier, index);
+            self.spawn_download_task(response, &download_tx, &barrier, index);
         }
-        drop(sc);
+        drop(download_tx);
 
         let (write_tx, write_rx) = sync::mpsc::channel();
 
@@ -65,7 +65,7 @@ impl HttpDownloader {
         let writer_handle = tokio::task::spawn_blocking(writer);
 
         let write_size = 1024 * 32;
-        while let Some((chunk, index)) = rc.recv().await {
+        while let Some((chunk, index)) = download_rx.recv().await {
             self.info.add_to_downloaded_bytes(chunk.len() as u64);
             aggregators[index].push(chunk);
             if aggregators[index].len() >= write_size {
@@ -86,31 +86,33 @@ impl HttpDownloader {
     fn spawn_download_task(
         &self,
         response: Response,
-        sc: &Sender<(Bytes, usize)>,
+        download_tx: &Sender<(Bytes, usize)>,
         barrier: &Arc<Barrier>,
         index: usize,
     ) {
         let throttle_config = Arc::clone(&self.config.throttle_config);
-        let sc_clone = sc.clone();
+        let download_tx = download_tx.clone();
         let barrier = Arc::clone(barrier);
         tokio::spawn(async move {
-            HttpDownloader::download(response, throttle_config, sc_clone, barrier, index).await
+            HttpDownloader::download(response, throttle_config, download_tx, barrier, index).await
         });
     }
 
     async fn download(
         mut response: Response,
         throttle_config: Arc<ThrottleConfig>,
-        sc: Sender<(Bytes, usize)>,
+        download_tx: Sender<(Bytes, usize)>,
         barrier: Arc<Barrier>,
         index: usize,
     ) {
-        let mut download_strategy = DownloadStrategy::new(sc.clone(), throttle_config.task_speed());
+        let mut download_strategy =
+            DownloadStrategy::new(download_tx.clone(), throttle_config.task_speed());
 
         while let Some(chunk) = response.chunk().await.unwrap() {
             download_strategy.handle_chunk(chunk, &index).await;
             if throttle_config.has_throttle_changed() {
-                download_strategy = DownloadStrategy::new(sc.clone(), throttle_config.task_speed());
+                download_strategy =
+                    DownloadStrategy::new(download_tx.clone(), throttle_config.task_speed());
                 let wait_result = barrier.wait().await;
                 if wait_result.is_leader() {
                     throttle_config.reset_has_throttle_changed();
@@ -119,8 +121,8 @@ impl HttpDownloader {
         }
     }
 
-    async fn process_chunk(sc: &mut Sender<(Bytes, usize)>, chunk: Bytes, index: &usize) {
-        sc.send((chunk, *index)).await.unwrap();
+    async fn process_chunk(download_tx: &mut Sender<(Bytes, usize)>, chunk: Bytes, index: &usize) {
+        download_tx.send((chunk, *index)).await.unwrap();
     }
 
     fn flush_to_writer(
@@ -148,32 +150,36 @@ impl HttpDownloader {
 
 enum DownloadStrategy {
     NotThrottled {
-        sc: Sender<(Bytes, usize)>,
+        download_tx: Sender<(Bytes, usize)>,
     },
     Throttled {
-        sc: Sender<(Bytes, usize)>,
+        download_tx: Sender<(Bytes, usize)>,
         throttle: Throttler,
     },
 }
 
 impl DownloadStrategy {
-    fn new(sc: Sender<(Bytes, usize)>, task_speed: u64) -> Self {
+    fn new(download_tx: Sender<(Bytes, usize)>, task_speed: u64) -> Self {
         if task_speed > 0 {
             let throttle = Throttler::new(task_speed);
-            DownloadStrategy::Throttled { sc, throttle }
+            DownloadStrategy::Throttled {
+                download_tx,
+                throttle,
+            }
         } else {
-            DownloadStrategy::NotThrottled { sc }
+            DownloadStrategy::NotThrottled { download_tx }
         }
     }
 
     async fn handle_chunk(&mut self, chunk: Bytes, index: &usize) {
         match self {
-            DownloadStrategy::NotThrottled { sc } => {
-                HttpDownloader::process_chunk(sc, chunk, index).await
+            DownloadStrategy::NotThrottled { download_tx } => {
+                HttpDownloader::process_chunk(download_tx, chunk, index).await
             }
-            DownloadStrategy::Throttled { sc, throttle } => {
-                throttle.process_throttled(sc, chunk, index).await
-            }
+            DownloadStrategy::Throttled {
+                download_tx,
+                throttle,
+            } => throttle.process_throttled(download_tx, chunk, index).await,
         }
     }
 }
