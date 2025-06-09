@@ -30,6 +30,10 @@ impl HttpDownloader {
         format!("bytes={}-{}", start, end)
     }
 
+    fn extract_start_range(start: u64) -> String {
+        format!("bytes={}-", start)
+    }
+
     pub async fn start(&self) {
         let (sc, mut rc) = channel(512);
         let barrier = Arc::new(Barrier::new(self.config.tasks_count as usize));
