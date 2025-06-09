@@ -10,7 +10,10 @@ use tokio::sync::{
     mpsc::{Sender, channel},
 };
 
-use crate::http::{progress_state::ProgressState, request_utils::RequestBuilderExt};
+use crate::http::{
+    progress_state::ProgressState,
+    request_utils::{RequestBuilderExt, basic_request},
+};
 
 use super::{
     HttpDownloader,
@@ -38,9 +41,7 @@ impl HttpDownloader {
             let part_range = HttpDownloader::extract_part_range((start, end));
             aggregators.push(BytesAggregator::new(start));
             download_offsets.push(start);
-            let response = self
-                .client
-                .get(self.raw_url.as_str())
+            let response = basic_request(&self.client, &self.raw_url)
                 .with_range(part_range)
                 .send()
                 .await
