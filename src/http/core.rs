@@ -33,14 +33,11 @@ impl HttpDownloader {
         let mut aggregators = vec![];
         let mut download_offsets = vec![];
 
-        for i in 0..self.config.tasks_count as usize {
-            let (start, end) = self.byte_ranges[i];
+        for index in 0..self.config.tasks_count as usize {
+            let (start, end) = self.byte_ranges[index];
             let part_range = HttpDownloader::extract_part_range((start, end));
             aggregators.push(BytesAggregator::new(start));
             download_offsets.push(start);
-            let sc_clone = sc.clone();
-            let throttle_config = Arc::clone(&self.config.throttle_config);
-            let barrier = Arc::clone(&barrier);
             let response = self
                 .client
                 .get(self.raw_url.as_str())
@@ -48,9 +45,7 @@ impl HttpDownloader {
                 .send()
                 .await
                 .unwrap();
-            tokio::spawn(async move {
-                HttpDownloader::download_part(response, throttle_config, sc_clone, barrier, i).await
-            });
+            self.spawn_download_task(response, &sc, &barrier, index);
         }
         drop(sc);
 
@@ -86,7 +81,22 @@ impl HttpDownloader {
         writer_handle.await.unwrap();
     }
 
-    async fn download_part(
+    fn spawn_download_task(
+        &self,
+        response: Response,
+        sc: &Sender<(Bytes, usize)>,
+        barrier: &Arc<Barrier>,
+        index: usize,
+    ) {
+        let throttle_config = Arc::clone(&self.config.throttle_config);
+        let sc_clone = sc.clone();
+        let barrier = Arc::clone(barrier);
+        tokio::spawn(async move {
+            HttpDownloader::download(response, throttle_config, sc_clone, barrier, index).await
+        });
+    }
+
+    async fn download(
         mut response: Response,
         throttle_config: Arc<ThrottleConfig>,
         sc: Sender<(Bytes, usize)>,
