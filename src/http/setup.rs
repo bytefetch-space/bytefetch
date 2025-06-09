@@ -1,4 +1,4 @@
-use crate::http::{builder_utils, config::HttpDownloadConfig};
+use crate::http::{HttpDownloadMode, builder_utils, config::HttpDownloadConfig};
 
 use super::{HttpDownloader, HttpDownloaderSetupErrors, info::HttpDownloadInfo};
 
@@ -103,15 +103,22 @@ impl HttpDownloaderSetup {
             .extract_and_set_is_resumable(accept_ranges)
     }
 
-    fn generate_byte_ranges(config: &HttpDownloadConfig) -> Vec<(u64, u64)> {
-        let mut byte_ranges = vec![];
-        for index in 0..config.tasks_count as u64 {
-            byte_ranges.push(builder_utils::calculate_part_range(
-                config.split_result.unwrap(),
-                index,
-            ));
+    fn generate_byte_ranges(
+        config: &HttpDownloadConfig,
+        mode: &HttpDownloadMode,
+    ) -> Vec<(u64, u64)> {
+        match mode {
+            HttpDownloadMode::NonResumable => vec![],
+            HttpDownloadMode::ResumableStream => vec![(0, 0)],
+            HttpDownloadMode::ResumableMultithread => {
+                let mut byte_ranges = vec![];
+                let split_content = config.split_result.unwrap();
+                for index in 0..config.tasks_count as u64 {
+                    byte_ranges.push(builder_utils::calculate_part_range(split_content, index));
+                }
+                byte_ranges
+            }
         }
-        byte_ranges
     }
 
     pub async fn init(self) -> HttpDownloader {
@@ -125,8 +132,8 @@ impl HttpDownloaderSetup {
             client: Arc::new(self.client),
             raw_url: Arc::new(self.raw_url),
             info,
+            byte_ranges: HttpDownloaderSetup::generate_byte_ranges(&config, &mode),
             mode,
-            byte_ranges: HttpDownloaderSetup::generate_byte_ranges(&config),
             config,
         }
     }
