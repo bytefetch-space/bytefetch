@@ -8,6 +8,7 @@ use tokio::sync::{
 };
 
 use crate::http::{
+    HttpDownloadMode,
     progress_state::ProgressState,
     request_utils::{RequestBuilderExt, basic_request},
     session::HttpDownloadSession,
@@ -36,8 +37,17 @@ impl HttpDownloader {
         let (download_tx, mut download_rx) = channel(512);
         let mut session = HttpDownloadSession::new(self.config.tasks_count as usize);
 
-        self.spawn_multiple_download_tasks(&mut session, download_tx)
-            .await;
+        match self.mode {
+            HttpDownloadMode::NonResumable => todo!(),
+            HttpDownloadMode::ResumableStream => {
+                self.spawn_resumable_download_task(&mut session, download_tx)
+                    .await
+            }
+            HttpDownloadMode::ResumableMultithread => {
+                self.spawn_multiple_download_tasks(&mut session, download_tx)
+                    .await
+            }
+        }
 
         let (write_tx, write_rx) = sync::mpsc::channel();
 
@@ -70,6 +80,15 @@ impl HttpDownloader {
 
         drop(write_tx);
         writer_handle.await.unwrap();
+    }
+
+    async fn spawn_resumable_download_task(
+        &self,
+        session: &mut HttpDownloadSession,
+        download_tx: Sender<(Bytes, usize)>,
+    ) {
+        self.spawn_download_for_range(session, &download_tx, (self.byte_ranges[0].0, None), 0)
+            .await;
     }
 
     async fn spawn_multiple_download_tasks(
