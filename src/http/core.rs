@@ -1,7 +1,4 @@
-use std::{
-    sync::{self, Arc},
-    vec,
-};
+use std::sync::{self, Arc};
 
 use bytes::Bytes;
 use reqwest::Response;
@@ -13,6 +10,7 @@ use tokio::sync::{
 use crate::http::{
     progress_state::ProgressState,
     request_utils::{RequestBuilderExt, basic_request},
+    session::HttpDownloadSession,
 };
 
 use super::{
@@ -36,19 +34,10 @@ impl HttpDownloader {
 
     pub async fn start(&self) {
         let (download_tx, mut download_rx) = channel(512);
-        let barrier = Arc::new(Barrier::new(self.config.tasks_count as usize));
-        let mut aggregators = vec![];
-        let mut download_offsets = vec![];
+        let mut session = HttpDownloadSession::new(self.config.tasks_count as usize);
 
-        self.spawn_multiple_download_tasks(
-            &mut aggregators,
-            &mut download_offsets,
-            &download_tx,
-            &barrier,
-        )
-        .await;
-
-        drop(download_tx);
+        self.spawn_multiple_download_tasks(&mut session, download_tx)
+            .await;
 
         let (write_tx, write_rx) = sync::mpsc::channel();
 
@@ -58,7 +47,7 @@ impl HttpDownloader {
             (*self.raw_url).clone(),
             *self.info.content_length(),
             self.config.tasks_count,
-            download_offsets,
+            session.take_download_offsets(),
         );
 
         let writer = move || HttpDownloader::file_writer(write_rx, file, state);
@@ -67,15 +56,15 @@ impl HttpDownloader {
         let write_size = 1024 * 32;
         while let Some((chunk, index)) = download_rx.recv().await {
             self.info.add_to_downloaded_bytes(chunk.len() as u64);
-            aggregators[index].push(chunk);
-            if aggregators[index].len() >= write_size {
-                HttpDownloader::flush_to_writer(&write_tx, &mut aggregators[index], index);
+            session.aggregators[index].push(chunk);
+            if session.aggregators[index].len() >= write_size {
+                HttpDownloader::flush_to_writer(&write_tx, &mut session.aggregators[index], index);
             }
         }
 
         for index in 0..self.config.tasks_count as usize {
-            if aggregators[index].len() > 0 {
-                HttpDownloader::flush_to_writer(&write_tx, &mut aggregators[index], index);
+            if session.aggregators[index].len() > 0 {
+                HttpDownloader::flush_to_writer(&write_tx, &mut session.aggregators[index], index);
             }
         }
 
@@ -85,32 +74,21 @@ impl HttpDownloader {
 
     async fn spawn_multiple_download_tasks(
         &self,
-        aggregators: &mut Vec<BytesAggregator>,
-        download_offsets: &mut Vec<u64>,
-        download_tx: &Sender<(Bytes, usize)>,
-        barrier: &Arc<Barrier>,
+        session: &mut HttpDownloadSession,
+        download_tx: Sender<(Bytes, usize)>,
     ) {
         for index in 0..self.config.tasks_count as usize {
             let (start, end) = self.byte_ranges[index];
-            self.spawn_download_for_range(
-                (start, Some(end)),
-                aggregators,
-                download_offsets,
-                download_tx,
-                barrier,
-                index,
-            )
-            .await;
+            self.spawn_download_for_range(session, &download_tx, (start, Some(end)), index)
+                .await;
         }
     }
 
     async fn spawn_download_for_range(
         &self,
-        (start, end): (u64, Option<u64>),
-        aggregators: &mut Vec<BytesAggregator>,
-        download_offsets: &mut Vec<u64>,
+        session: &mut HttpDownloadSession,
         download_tx: &Sender<(Bytes, usize)>,
-        barrier: &Arc<Barrier>,
+        (start, end): (u64, Option<u64>),
         index: usize,
     ) {
         let part_range = match end {
@@ -118,13 +96,13 @@ impl HttpDownloader {
             None => Self::extract_start_range(start),
         };
 
-        aggregators.push(BytesAggregator::new(start));
-        download_offsets.push(start);
+        session.aggregators.push(BytesAggregator::new(start));
+        session.download_offsets.push(start);
 
         let request = basic_request(&self.client, &self.raw_url).with_range(part_range);
         let response = request.send().await.unwrap();
 
-        self.spawn_download_task(response, download_tx, barrier, index);
+        self.spawn_download_task(response, download_tx, &session.barrier, index);
     }
 
     fn spawn_download_task(

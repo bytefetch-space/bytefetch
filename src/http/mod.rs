@@ -8,6 +8,7 @@ mod from_state;
 mod info;
 mod progress_state;
 mod request_utils;
+mod session;
 mod setup;
 #[cfg(test)]
 mod tests;
