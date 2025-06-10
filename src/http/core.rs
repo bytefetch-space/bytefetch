@@ -40,15 +40,14 @@ impl HttpDownloader {
         let mut aggregators = vec![];
         let mut download_offsets = vec![];
 
-        for index in 0..self.config.tasks_count as usize {
-            let (start, end) = self.byte_ranges[index];
-            let part_range = HttpDownloader::extract_part_range((start, end));
-            aggregators.push(BytesAggregator::new(start));
-            download_offsets.push(start);
-            let request = basic_request(&self.client, &self.raw_url).with_range(part_range);
-            let response = request.send().await.unwrap();
-            self.spawn_download_task(response, &download_tx, &barrier, index);
-        }
+        self.spawn_multiple_download_tasks(
+            &mut aggregators,
+            &mut download_offsets,
+            &download_tx,
+            &barrier,
+        )
+        .await;
+
         drop(download_tx);
 
         let (write_tx, write_rx) = sync::mpsc::channel();
@@ -61,6 +60,7 @@ impl HttpDownloader {
             self.config.tasks_count,
             download_offsets,
         );
+
         let writer = move || HttpDownloader::file_writer(write_rx, file, state);
         let writer_handle = tokio::task::spawn_blocking(writer);
 
@@ -81,6 +81,50 @@ impl HttpDownloader {
 
         drop(write_tx);
         writer_handle.await.unwrap();
+    }
+
+    async fn spawn_multiple_download_tasks(
+        &self,
+        aggregators: &mut Vec<BytesAggregator>,
+        download_offsets: &mut Vec<u64>,
+        download_tx: &Sender<(Bytes, usize)>,
+        barrier: &Arc<Barrier>,
+    ) {
+        for index in 0..self.config.tasks_count as usize {
+            let (start, end) = self.byte_ranges[index];
+            self.spawn_download_for_range(
+                (start, Some(end)),
+                aggregators,
+                download_offsets,
+                download_tx,
+                barrier,
+                index,
+            )
+            .await;
+        }
+    }
+
+    async fn spawn_download_for_range(
+        &self,
+        (start, end): (u64, Option<u64>),
+        aggregators: &mut Vec<BytesAggregator>,
+        download_offsets: &mut Vec<u64>,
+        download_tx: &Sender<(Bytes, usize)>,
+        barrier: &Arc<Barrier>,
+        index: usize,
+    ) {
+        let part_range = match end {
+            Some(end) => Self::extract_part_range((start, end)),
+            None => Self::extract_start_range(start),
+        };
+
+        aggregators.push(BytesAggregator::new(start));
+        download_offsets.push(start);
+
+        let request = basic_request(&self.client, &self.raw_url).with_range(part_range);
+        let response = request.send().await.unwrap();
+
+        self.spawn_download_task(response, download_tx, barrier, index);
     }
 
     fn spawn_download_task(
