@@ -150,7 +150,17 @@ impl ProgressState {
         }
     }
 
-    pub(super) fn update_progress(&mut self, index: usize, written_bytes: u64) {
+    pub(super) fn get_progress(&self, index: usize) -> u64 {
+        self.segment_offsets[index]
+    }
+}
+
+pub(super) trait ProgressUpdater {
+    fn update_progress(&mut self, index: usize, written_bytes: u64);
+}
+
+impl ProgressUpdater for ProgressState {
+    fn update_progress(&mut self, index: usize, written_bytes: u64) {
         let offset = self.progress_offset + index as u64 * U64_SIZE;
         self.file.seek(SeekFrom::Start(offset)).unwrap();
         self.segment_offsets[index] += written_bytes;
@@ -159,8 +169,11 @@ impl ProgressState {
             .unwrap();
         self.file.flush().unwrap();
     }
+}
 
-    pub(super) fn get_progress(&self, index: usize) -> u64 {
-        self.segment_offsets[index]
-    }
+pub(super) struct NoOpProgressState;
+
+impl ProgressUpdater for NoOpProgressState {
+    #[inline(always)]
+    fn update_progress(&mut self, _index: usize, _written_bytes: u64) {} // no-op
 }

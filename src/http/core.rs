@@ -2,14 +2,17 @@ use std::sync::{self, Arc};
 
 use bytes::Bytes;
 use reqwest::Response;
-use tokio::sync::{
-    Barrier,
-    mpsc::{Sender, channel},
+use tokio::{
+    sync::{
+        Barrier,
+        mpsc::{Sender, channel},
+    },
+    task::JoinHandle,
 };
 
 use crate::http::{
     HttpDownloadMode,
-    progress_state::ProgressState,
+    progress_state::{NoOpProgressState, ProgressState, ProgressUpdater},
     request_utils::{RequestBuilderExt, basic_request},
     session::HttpDownloadSession,
 };
@@ -38,7 +41,10 @@ impl HttpDownloader {
         let mut session = HttpDownloadSession::new(self.config.tasks_count as usize);
 
         match self.mode {
-            HttpDownloadMode::NonResumable => todo!(),
+            HttpDownloadMode::NonResumable => {
+                self.spawn_nonresumable_download_task(&mut session, download_tx)
+                    .await
+            }
             HttpDownloadMode::ResumableStream => {
                 self.spawn_resumable_download_task(&mut session, download_tx)
                     .await
@@ -60,8 +66,7 @@ impl HttpDownloader {
             session.take_download_offsets(),
         );
 
-        let writer = move || HttpDownloader::file_writer(write_rx, file, state);
-        let writer_handle = tokio::task::spawn_blocking(writer);
+        let writer_handle = self.spawn_writer(write_rx, file, state);
 
         let write_size = 1024 * 32;
         while let Some((chunk, index)) = download_rx.recv().await {
@@ -72,7 +77,7 @@ impl HttpDownloader {
             }
         }
 
-        for index in 0..self.config.tasks_count as usize {
+        for index in 0..session.aggregators.len() {
             if session.aggregators[index].len() > 0 {
                 HttpDownloader::flush_to_writer(&write_tx, &mut session.aggregators[index], index);
             }
@@ -80,6 +85,19 @@ impl HttpDownloader {
 
         drop(write_tx);
         writer_handle.await.unwrap();
+    }
+
+    async fn spawn_nonresumable_download_task(
+        &self,
+        session: &mut HttpDownloadSession,
+        download_tx: Sender<(Bytes, usize)>,
+    ) {
+        session.aggregators.push(BytesAggregator::new(0));
+
+        let request = basic_request(&self.client, &self.raw_url);
+        let response = request.send().await.unwrap();
+
+        self.spawn_download_task(response, &download_tx, &session.barrier, 0);
     }
 
     async fn spawn_resumable_download_task(
@@ -162,6 +180,21 @@ impl HttpDownloader {
         }
     }
 
+    fn spawn_writer(
+        &self,
+        write_rx: StdReceiver<(usize, u64, Bytes)>,
+        file: FileWriter,
+        state: ProgressState,
+    ) -> JoinHandle<()> {
+        if self.mode == HttpDownloadMode::NonResumable {
+            let writer = move || HttpDownloader::file_writer(write_rx, file, NoOpProgressState);
+            tokio::task::spawn_blocking(writer)
+        } else {
+            let writer = move || HttpDownloader::file_writer(write_rx, file, state);
+            tokio::task::spawn_blocking(writer)
+        }
+    }
+
     async fn process_chunk(download_tx: &mut Sender<(Bytes, usize)>, chunk: Bytes, index: &usize) {
         download_tx.send((chunk, *index)).await.unwrap();
     }
@@ -176,10 +209,10 @@ impl HttpDownloader {
         write_tx.send((index, offset, buffer)).unwrap();
     }
 
-    fn file_writer(
+    fn file_writer<U: ProgressUpdater>(
         write_rx: StdReceiver<(usize, u64, Bytes)>,
         mut file: FileWriter,
-        mut state: ProgressState,
+        mut state: U,
     ) {
         while let Ok((index, offset, buffer)) = write_rx.recv() {
             let written_bytes = buffer.len() as u64;

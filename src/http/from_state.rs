@@ -90,8 +90,7 @@ impl HttpDownloaderFromStateBuilder {
         let info = Self::generate_info(self.filename, content_length, tasks_count);
         let mode = builder_utils::determine_mode(tasks_count, &info);
         let mut config = HttpDownloadConfig::default()
-            .set_thread_count(Some(tasks_count))
-            .unwrap()
+            .set_tasks_count(tasks_count)
             .mark_resumed();
         config.split_result = builder_utils::try_split_content(&mode, &content_length, tasks_count);
 

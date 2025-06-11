@@ -23,7 +23,7 @@ impl HttpDownloadConfig {
         }
     }
 
-    pub(super) fn set_thread_count(
+    pub(super) fn try_set_tasks_count(
         mut self,
         tasks_count: Option<u8>,
     ) -> Result<Self, HttpDownloaderSetupErrors> {
@@ -33,6 +33,11 @@ impl HttpDownloadConfig {
             None => DEFAULT_TASKS_COUNT,
         };
         Ok(self)
+    }
+
+    pub(super) fn set_tasks_count(mut self, task_count: u8) -> Self {
+        self.tasks_count = task_count;
+        self
     }
 
     pub(super) fn set_throttle_speed(self, throttle_speed: Option<u64>) -> Self {

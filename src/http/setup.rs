@@ -68,7 +68,7 @@ impl HttpDownloaderSetupBuilder {
 
     fn generate_config(&self) -> Result<HttpDownloadConfig, HttpDownloaderSetupErrors> {
         Ok(HttpDownloadConfig::default()
-            .set_thread_count(self.tasks_count)?
+            .try_set_tasks_count(self.tasks_count)?
             .set_throttle_speed(self.throttle_speed))
     }
 
@@ -125,7 +125,9 @@ impl HttpDownloaderSetup {
         let headers_response = self.get_headers().await.unwrap();
         let info = self.generate_info(headers_response);
         let mode = builder_utils::determine_mode(self.config.tasks_count, &info);
+
         let mut config = self.config;
+        (mode == HttpDownloadMode::NonResumable).then(|| config.tasks_count = 0);
         config.split_result =
             builder_utils::try_split_content(&mode, info.content_length(), config.tasks_count);
         HttpDownloader {
