@@ -15,3 +15,10 @@ fn test_extract_filename_from_url() {
     let result = filename_utils::extract_filename_from_url(&url);
     assert_eq!(result, Some(String::from("test.mp4")));
 }
+
+#[test]
+fn test_percent_decode() {
+    let url = "100%25_complete.mp3";
+    let result = filename_utils::percent_decode(&url);
+    assert_eq!(result, String::from("100%_complete.mp3"));
+}
