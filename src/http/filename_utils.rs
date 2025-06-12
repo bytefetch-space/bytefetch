@@ -1,3 +1,4 @@
+use percent_encoding::percent_decode_str;
 use regex::Regex;
 use reqwest::header::HeaderValue;
 
@@ -16,14 +17,16 @@ pub(super) fn extract_filename_from_url(raw_url: &str) -> Option<String> {
     captures.and_then(|captures| Some(captures[1].to_string()))
 }
 
+pub(super) fn percent_decode(input: &str) -> String {
+    percent_decode_str(input).decode_utf8_lossy().to_string()
+}
+
 pub(super) fn extract_filename(
     raw_url: &str,
     content_disposition: &Option<&HeaderValue>,
 ) -> String {
-    let mut filename_option = extract_filename_from_header(content_disposition);
-    if let Some(filename) = filename_option {
-        return filename;
-    };
-    filename_option = extract_filename_from_url(raw_url);
-    filename_option.unwrap_or(String::from("download"))
+    let raw_filename = extract_filename_from_header(content_disposition)
+        .or_else(|| extract_filename_from_url(raw_url))
+        .unwrap_or_else(|| "download".into());
+    percent_decode(&raw_filename)
 }
