@@ -11,7 +11,7 @@ use tokio::{
 };
 
 use crate::http::{
-    HttpDownloadMode,
+    HttpDownloadMode, Status,
     progress_state::{NoOpProgressState, ProgressState, ProgressUpdater},
     request_utils::{RequestBuilderExt, basic_request},
     session::HttpDownloadSession,
@@ -37,6 +37,7 @@ impl HttpDownloader {
     }
 
     pub async fn start(&self) {
+        self.set_status(Status::Downloading);
         let (download_tx, mut download_rx) = channel(512);
         let mut session = HttpDownloadSession::new(self.config.tasks_count as usize);
 
@@ -85,6 +86,7 @@ impl HttpDownloader {
 
         drop(write_tx);
         writer_handle.await.unwrap();
+        self.set_status(Status::Completed);
     }
 
     async fn spawn_nonresumable_download_task(

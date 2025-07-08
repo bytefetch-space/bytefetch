@@ -19,7 +19,7 @@ use config::HttpDownloadConfig;
 use info::HttpDownloadInfo;
 use reqwest::Client;
 use setup::HttpDownloaderSetupBuilder;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct HttpDownloader {
     client: Arc<Client>,
@@ -28,6 +28,7 @@ pub struct HttpDownloader {
     pub mode: HttpDownloadMode,
     config: HttpDownloadConfig,
     byte_ranges: Vec<(u64, u64)>,
+    status: Mutex<Status>,
 }
 
 impl HttpDownloader {
@@ -56,6 +57,10 @@ impl HttpDownloader {
             .throttle_config
             .change_throttle_speed(throttle_speed, self.config.tasks_count as u64);
     }
+
+    fn set_status(&self, status: Status) {
+        *self.status.lock().unwrap() = status
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -68,4 +73,10 @@ pub enum HttpDownloadMode {
 #[derive(Debug)]
 pub enum HttpDownloaderSetupErrors {
     InvalidThreadsCount,
+}
+
+pub enum Status {
+    Pending,
+    Downloading,
+    Completed,
 }

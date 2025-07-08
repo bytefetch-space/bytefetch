@@ -1,4 +1,4 @@
-use crate::http::{HttpDownloadMode, builder_utils, config::HttpDownloadConfig};
+use crate::http::{HttpDownloadMode, Status, builder_utils, config::HttpDownloadConfig};
 
 use super::{HttpDownloader, HttpDownloaderSetupErrors, info::HttpDownloadInfo};
 
@@ -6,7 +6,10 @@ use reqwest::{
     Client,
     header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH},
 };
-use std::{marker::PhantomData, sync::Arc};
+use std::{
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
 
 pub struct ClientRequired;
 pub struct UrlRequired;
@@ -137,6 +140,7 @@ impl HttpDownloaderSetup {
             byte_ranges: HttpDownloaderSetup::generate_byte_ranges(&config, &mode),
             mode,
             config,
+            status: Mutex::new(Status::Pending),
         }
     }
 }

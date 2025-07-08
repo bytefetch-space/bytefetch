@@ -1,10 +1,14 @@
 use reqwest::Client;
-use std::{marker::PhantomData, sync::Arc};
+use std::{
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     HttpDownloader,
     http::{
-        HttpDownloadConfig, HttpDownloadMode, ProgressState, builder_utils, info::HttpDownloadInfo,
+        HttpDownloadConfig, HttpDownloadMode, ProgressState, Status, builder_utils,
+        info::HttpDownloadInfo,
     },
 };
 
@@ -106,6 +110,7 @@ impl HttpDownloaderFromStateBuilder {
             mode,
             config,
             byte_ranges,
+            status: Mutex::new(Status::Pending),
         }
     }
 }
