@@ -10,6 +10,7 @@ use std::{
     marker::PhantomData,
     sync::{Arc, Mutex},
 };
+use tokio_util::sync::CancellationToken;
 
 pub struct ClientRequired;
 pub struct UrlRequired;
@@ -140,7 +141,8 @@ impl HttpDownloaderSetup {
             byte_ranges: HttpDownloaderSetup::generate_byte_ranges(&config, &mode),
             mode,
             config,
-            status: Mutex::new(Status::Pending),
+            status: Arc::new(Mutex::new(Status::Pending)),
+            token: CancellationToken::new(),
         }
     }
 }

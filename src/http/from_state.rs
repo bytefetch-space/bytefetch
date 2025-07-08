@@ -3,6 +3,7 @@ use std::{
     marker::PhantomData,
     sync::{Arc, Mutex},
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     HttpDownloader,
@@ -110,7 +111,8 @@ impl HttpDownloaderFromStateBuilder {
             mode,
             config,
             byte_ranges,
-            status: Mutex::new(Status::Pending),
+            status: Arc::new(Mutex::new(Status::Pending)),
+            token: CancellationToken::new(),
         }
     }
 }

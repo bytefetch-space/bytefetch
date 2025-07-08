@@ -20,6 +20,7 @@ use info::HttpDownloadInfo;
 use reqwest::Client;
 use setup::HttpDownloaderSetupBuilder;
 use std::sync::{Arc, Mutex};
+use tokio_util::sync::CancellationToken;
 
 pub struct HttpDownloader {
     client: Arc<Client>,
@@ -28,7 +29,8 @@ pub struct HttpDownloader {
     pub mode: HttpDownloadMode,
     config: HttpDownloadConfig,
     byte_ranges: Vec<(u64, u64)>,
-    status: Mutex<Status>,
+    pub status: Arc<Mutex<Status>>,
+    token: CancellationToken,
 }
 
 impl HttpDownloader {
@@ -57,10 +59,6 @@ impl HttpDownloader {
             .throttle_config
             .change_throttle_speed(throttle_speed, self.config.tasks_count as u64);
     }
-
-    fn set_status(&self, status: Status) {
-        *self.status.lock().unwrap() = status
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -75,8 +73,34 @@ pub enum HttpDownloaderSetupErrors {
     InvalidThreadsCount,
 }
 
+#[derive(Debug)]
 pub enum Status {
     Pending,
     Downloading,
     Completed,
+    Failed(reqwest::Error),
+    Canceled,
+}
+
+trait StatusMutexExt {
+    fn update(&self, new: Status);
+    fn update_if_downloading(&self, _: Status) {}
+    fn complete_if_downloading(&self) {}
+}
+
+impl StatusMutexExt for Mutex<Status> {
+    fn update(&self, new: Status) {
+        *self.lock().unwrap() = new
+    }
+
+    fn update_if_downloading(&self, new: Status) {
+        let mut guard = self.lock().unwrap();
+        if matches!(*guard, Status::Downloading) {
+            *guard = new
+        }
+    }
+
+    fn complete_if_downloading(&self) {
+        self.update_if_downloading(Status::Completed);
+    }
 }

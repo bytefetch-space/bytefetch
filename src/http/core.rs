@@ -1,17 +1,19 @@
-use std::sync::{self, Arc};
+use std::sync::{self, Arc, Mutex};
 
 use bytes::Bytes;
 use reqwest::Response;
 use tokio::{
+    select,
     sync::{
         Barrier,
         mpsc::{Sender, channel},
     },
     task::JoinHandle,
 };
+use tokio_util::sync::CancellationToken;
 
 use crate::http::{
-    HttpDownloadMode, Status,
+    HttpDownloadMode, Status, StatusMutexExt,
     progress_state::{NoOpProgressState, ProgressState, ProgressUpdater},
     request_utils::{RequestBuilderExt, basic_request},
     session::HttpDownloadSession,
@@ -37,7 +39,7 @@ impl HttpDownloader {
     }
 
     pub async fn start(&self) {
-        self.set_status(Status::Downloading);
+        self.status.update(Status::Downloading);
         let (download_tx, mut download_rx) = channel(512);
         let mut session = HttpDownloadSession::new(self.config.tasks_count as usize);
 
@@ -86,7 +88,7 @@ impl HttpDownloader {
 
         drop(write_tx);
         writer_handle.await.unwrap();
-        self.set_status(Status::Completed);
+        self.status.complete_if_downloading();
     }
 
     async fn spawn_nonresumable_download_task(
@@ -154,8 +156,19 @@ impl HttpDownloader {
         let throttle_config = Arc::clone(&self.config.throttle_config);
         let download_tx = download_tx.clone();
         let barrier = Arc::clone(barrier);
+        let status = Arc::clone(&self.status);
+        let token = self.token.clone();
         tokio::spawn(async move {
-            HttpDownloader::download(response, throttle_config, download_tx, barrier, index).await
+            HttpDownloader::download(
+                response,
+                throttle_config,
+                download_tx,
+                barrier,
+                index,
+                status,
+                token,
+            )
+            .await
         });
     }
 
@@ -165,18 +178,39 @@ impl HttpDownloader {
         download_tx: Sender<(Bytes, usize)>,
         barrier: Arc<Barrier>,
         index: usize,
+        status: Arc<Mutex<Status>>,
+        token: CancellationToken,
     ) {
         let mut download_strategy =
             DownloadStrategy::new(download_tx.clone(), throttle_config.task_speed());
 
-        while let Some(chunk) = response.chunk().await.unwrap() {
-            download_strategy.handle_chunk(chunk, &index).await;
-            if throttle_config.has_throttle_changed() {
-                download_strategy =
-                    DownloadStrategy::new(download_tx.clone(), throttle_config.task_speed());
-                let wait_result = barrier.wait().await;
-                if wait_result.is_leader() {
-                    throttle_config.reset_has_throttle_changed();
+        loop {
+            select! {
+                _ = token.cancelled() => {
+                    status.update_if_downloading(Status::Canceled);
+                    break;
+                }
+
+                chunk_res = response.chunk() => {
+                    match chunk_res {
+                        Ok(Some(chunk)) => {
+                            download_strategy.handle_chunk(chunk, &index).await;
+                            if throttle_config.has_throttle_changed() {
+                                download_strategy =
+                                    DownloadStrategy::new(download_tx.clone(), throttle_config.task_speed());
+                                let wait_result = barrier.wait().await;
+                                if wait_result.is_leader() {
+                                    throttle_config.reset_has_throttle_changed();
+                                }
+                            }
+                        }
+                        Ok(None) => break,
+                        Err(e) => {
+                            status.update_if_downloading(Status::Failed(e));
+                            token.cancel();
+                            break;
+                        }
+                    }
                 }
             }
         }
