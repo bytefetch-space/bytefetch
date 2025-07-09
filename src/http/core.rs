@@ -181,8 +181,11 @@ impl HttpDownloader {
         status: Arc<Mutex<Status>>,
         token: CancellationToken,
     ) {
-        let mut download_strategy =
-            DownloadStrategy::new(download_tx.clone(), throttle_config.task_speed());
+        let mut download_strategy = DownloadStrategy::new(
+            download_tx.clone(),
+            token.clone(),
+            throttle_config.task_speed(),
+        );
 
         loop {
             select! {
@@ -197,7 +200,7 @@ impl HttpDownloader {
                             download_strategy.handle_chunk(chunk, &index).await;
                             if throttle_config.has_throttle_changed() {
                                 download_strategy =
-                                    DownloadStrategy::new(download_tx.clone(), throttle_config.task_speed());
+                                    DownloadStrategy::new(download_tx.clone(), token.clone(), throttle_config.task_speed());
                                 let wait_result = barrier.wait().await;
                                 if wait_result.is_leader() {
                                     throttle_config.reset_has_throttle_changed();
@@ -265,16 +268,18 @@ enum DownloadStrategy {
     Throttled {
         download_tx: Sender<(Bytes, usize)>,
         throttle: Throttler,
+        token: CancellationToken,
     },
 }
 
 impl DownloadStrategy {
-    fn new(download_tx: Sender<(Bytes, usize)>, task_speed: u64) -> Self {
+    fn new(download_tx: Sender<(Bytes, usize)>, token: CancellationToken, task_speed: u64) -> Self {
         if task_speed > 0 {
             let throttle = Throttler::new(task_speed);
             DownloadStrategy::Throttled {
                 download_tx,
                 throttle,
+                token,
             }
         } else {
             DownloadStrategy::NotThrottled { download_tx }
@@ -289,7 +294,12 @@ impl DownloadStrategy {
             DownloadStrategy::Throttled {
                 download_tx,
                 throttle,
-            } => throttle.process_throttled(download_tx, chunk, index).await,
+                token,
+            } => {
+                throttle
+                    .process_throttled(download_tx, token, chunk, index)
+                    .await
+            }
         }
     }
 }

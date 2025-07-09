@@ -4,7 +4,8 @@ use std::{
 };
 
 use bytes::Bytes;
-use tokio::{sync::mpsc::Sender, time::sleep};
+use tokio::{select, sync::mpsc::Sender, time::sleep};
+use tokio_util::sync::CancellationToken;
 
 pub struct Throttler {
     timestamp: Instant,
@@ -24,6 +25,7 @@ impl Throttler {
     pub(super) async fn process_throttled(
         &mut self,
         download_tx: &mut Sender<(Bytes, usize)>,
+        token: &mut CancellationToken,
         chunk: Bytes,
         index: &usize,
     ) {
@@ -36,7 +38,10 @@ impl Throttler {
 
         let sleep_time = self.compute_sleep_time();
         if sleep_time >= 0.001 {
-            sleep(Duration::from_secs_f32(sleep_time)).await;
+            select! {
+                _ = token.cancelled() => return,
+                _ = sleep(Duration::from_secs_f32(sleep_time)) => {}
+            }
         }
 
         self.bytes_downloaded = 0;
