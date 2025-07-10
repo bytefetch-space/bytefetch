@@ -1,7 +1,7 @@
 use std::sync::{self, Arc, Mutex};
 
 use bytes::Bytes;
-use reqwest::Response;
+use reqwest::RequestBuilder;
 use tokio::{
     select,
     sync::{
@@ -99,9 +99,8 @@ impl HttpDownloader {
         session.aggregators.push(BytesAggregator::new(0));
 
         let request = basic_request(&self.client, &self.raw_url);
-        let response = request.send().await.unwrap();
 
-        self.spawn_download_task(response, &download_tx, &session.barrier, 0);
+        self.spawn_download_task(request, &download_tx, &session.barrier, 0);
     }
 
     async fn spawn_resumable_download_task(
@@ -141,14 +140,13 @@ impl HttpDownloader {
         session.download_offsets.push(start);
 
         let request = basic_request(&self.client, &self.raw_url).with_range(part_range);
-        let response = request.send().await.unwrap();
 
-        self.spawn_download_task(response, download_tx, &session.barrier, index);
+        self.spawn_download_task(request, download_tx, &session.barrier, index);
     }
 
     fn spawn_download_task(
         &self,
-        response: Response,
+        request: RequestBuilder,
         download_tx: &Sender<(Bytes, usize)>,
         barrier: &Arc<Barrier>,
         index: usize,
@@ -160,7 +158,7 @@ impl HttpDownloader {
         let token = self.token.clone();
         tokio::spawn(async move {
             HttpDownloader::download(
-                response,
+                request,
                 throttle_config,
                 download_tx,
                 barrier,
@@ -173,7 +171,7 @@ impl HttpDownloader {
     }
 
     async fn download(
-        mut response: Response,
+        request: RequestBuilder,
         throttle_config: Arc<ThrottleConfig>,
         download_tx: Sender<(Bytes, usize)>,
         barrier: Arc<Barrier>,
@@ -186,6 +184,8 @@ impl HttpDownloader {
             token.clone(),
             throttle_config.task_speed(),
         );
+
+        let mut response = request.send().await.unwrap();
 
         loop {
             select! {
