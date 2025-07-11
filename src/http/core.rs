@@ -1,4 +1,7 @@
-use std::sync::{self, Arc, Mutex};
+use std::{
+    sync::{self, Arc, Mutex},
+    time::Duration,
+};
 
 use bytes::Bytes;
 use reqwest::RequestBuilder;
@@ -9,11 +12,12 @@ use tokio::{
         mpsc::{Sender, channel},
     },
     task::JoinHandle,
+    time::{Instant, sleep},
 };
 use tokio_util::sync::CancellationToken;
 
 use crate::http::{
-    Error, HttpDownloadMode, Status, StatusMutexExt,
+    HttpDownloadMode, Status, StatusMutexExt,
     progress_state::{NoOpProgressState, ProgressState, ProgressUpdater},
     request_utils::{RequestBuilderExt, basic_request},
     session::HttpDownloadSession,
@@ -193,7 +197,13 @@ impl HttpDownloader {
             throttle_config.task_speed(),
         );
 
+        let timeout = Duration::from_secs(1);
+        let sleep_fut = sleep(timeout);
+        tokio::pin!(sleep_fut);
+
         loop {
+            sleep_fut.as_mut().reset(Instant::now() + timeout);
+
             select! {
                 _ = token.cancelled() => {
                     status.update_and_cancel_download(Status::Canceled, token);
@@ -219,6 +229,11 @@ impl HttpDownloader {
                             break;
                         }
                     }
+                }
+
+                _ = sleep_fut.as_mut() => {
+                    status.update_and_cancel_download(Status::fail_with_timeout(), token);
+                    break;
                 }
             }
         }

@@ -92,6 +92,10 @@ impl Status {
     pub fn fail_with_network(e: reqwest::Error) -> Self {
         Self::Failed(Error::Network(e))
     }
+
+    pub fn fail_with_timeout() -> Self {
+        Self::Failed(Error::Timeout)
+    }
 }
 
 impl From<Error> for Status {
