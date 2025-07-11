@@ -209,7 +209,7 @@ impl HttpDownloader {
                         }
                         Ok(None) => break,
                         Err(e) => {
-                            status.update_if_downloading(Status::Failed(e));
+                            status.update_if_downloading(Status::fail_with_network(e));
                             token.cancel();
                             break;
                         }

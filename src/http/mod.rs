@@ -74,12 +74,23 @@ pub enum HttpDownloaderSetupErrors {
 }
 
 #[derive(Debug)]
+pub enum Error {
+    Network(reqwest::Error),
+}
+
+#[derive(Debug)]
 pub enum Status {
     Pending,
     Downloading,
     Completed,
-    Failed(reqwest::Error),
+    Failed(Error),
     Canceled,
+}
+
+impl Status {
+    pub fn fail_with_network(e: reqwest::Error) -> Self {
+        Self::Failed(Error::Network(e))
+    }
 }
 
 trait StatusMutexExt {
