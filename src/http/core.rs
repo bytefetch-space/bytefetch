@@ -160,6 +160,7 @@ impl HttpDownloader {
         let barrier = Arc::clone(barrier);
         let status = Arc::clone(&self.status);
         let token = self.token.clone();
+        let timeout = self.config.timeout;
         tokio::spawn(async move {
             HttpDownloader::download(
                 request,
@@ -169,6 +170,7 @@ impl HttpDownloader {
                 index,
                 status,
                 token,
+                timeout,
             )
             .await
         });
@@ -182,8 +184,9 @@ impl HttpDownloader {
         index: usize,
         status: Arc<Mutex<Status>>,
         token: CancellationToken,
+        timeout: Duration,
     ) {
-        let mut response = match request.send_with_timeout().await {
+        let mut response = match request.send_with_timeout(timeout).await {
             Ok(response) => response,
             Err(e) => {
                 status.update_and_cancel_download(e.into(), token);
@@ -197,7 +200,6 @@ impl HttpDownloader {
             throttle_config.task_speed(),
         );
 
-        let timeout = Duration::from_secs(1);
         let sleep_fut = sleep(timeout);
         tokio::pin!(sleep_fut);
 

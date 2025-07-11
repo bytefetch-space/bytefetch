@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use super::{HttpDownloaderSetupErrors, throttle::ThrottleConfig};
 
@@ -11,6 +11,7 @@ pub(super) struct HttpDownloadConfig {
     pub(super) split_result: Option<(u64, u64)>,
     pub(super) throttle_config: Arc<ThrottleConfig>,
     pub(super) is_new: bool,
+    pub(super) timeout: Duration,
 }
 
 impl HttpDownloadConfig {
@@ -20,6 +21,7 @@ impl HttpDownloadConfig {
             split_result: None,
             throttle_config: Arc::new(ThrottleConfig::default()),
             is_new: true,
+            timeout: Duration::from_secs(10),
         }
     }
 

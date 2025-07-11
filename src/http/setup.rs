@@ -97,7 +97,10 @@ pub struct HttpDownloaderSetup {
 
 impl HttpDownloaderSetup {
     async fn get_headers(&self) -> Result<reqwest::Response, Error> {
-        self.client.head(&self.raw_url).send_with_timeout().await
+        self.client
+            .head(&self.raw_url)
+            .send_with_timeout(self.config.timeout)
+            .await
     }
 
     fn generate_info(&self, headers_response: reqwest::Response) -> HttpDownloadInfo {
