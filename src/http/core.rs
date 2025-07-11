@@ -13,7 +13,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::http::{
-    HttpDownloadMode, Status, StatusMutexExt,
+    Error, HttpDownloadMode, Status, StatusMutexExt,
     progress_state::{NoOpProgressState, ProgressState, ProgressUpdater},
     request_utils::{RequestBuilderExt, basic_request},
     session::HttpDownloadSession,
@@ -179,18 +179,24 @@ impl HttpDownloader {
         status: Arc<Mutex<Status>>,
         token: CancellationToken,
     ) {
+        let mut response = match request.send_with_timeout().await {
+            Ok(response) => response,
+            Err(e) => {
+                status.update_and_cancel_download(e.into(), token);
+                return;
+            }
+        };
+
         let mut download_strategy = DownloadStrategy::new(
             download_tx.clone(),
             token.clone(),
             throttle_config.task_speed(),
         );
 
-        let mut response = request.send().await.unwrap();
-
         loop {
             select! {
                 _ = token.cancelled() => {
-                    status.update_if_downloading(Status::Canceled);
+                    status.update_and_cancel_download(Status::Canceled, token);
                     break;
                 }
 
@@ -209,8 +215,7 @@ impl HttpDownloader {
                         }
                         Ok(None) => break,
                         Err(e) => {
-                            status.update_if_downloading(Status::fail_with_network(e));
-                            token.cancel();
+                            status.update_and_cancel_download(Status::fail_with_network(e), token);
                             break;
                         }
                     }

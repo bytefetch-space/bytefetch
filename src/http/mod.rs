@@ -76,6 +76,7 @@ pub enum HttpDownloaderSetupErrors {
 #[derive(Debug)]
 pub enum Error {
     Network(reqwest::Error),
+    Timeout,
 }
 
 #[derive(Debug)]
@@ -93,9 +94,15 @@ impl Status {
     }
 }
 
+impl From<Error> for Status {
+    fn from(e: Error) -> Self {
+        Status::Failed(e)
+    }
+}
+
 trait StatusMutexExt {
     fn update(&self, new: Status);
-    fn update_if_downloading(&self, _: Status) {}
+    fn update_and_cancel_download(&self, _: Status, _: CancellationToken) {}
     fn complete_if_downloading(&self) {}
 }
 
@@ -104,14 +111,18 @@ impl StatusMutexExt for Mutex<Status> {
         *self.lock().unwrap() = new
     }
 
-    fn update_if_downloading(&self, new: Status) {
+    fn update_and_cancel_download(&self, new: Status, token: CancellationToken) {
         let mut guard = self.lock().unwrap();
         if matches!(*guard, Status::Downloading) {
-            *guard = new
+            *guard = new;
+            token.cancel();
         }
     }
 
     fn complete_if_downloading(&self) {
-        self.update_if_downloading(Status::Completed);
+        let mut guard = self.lock().unwrap();
+        if matches!(*guard, Status::Downloading) {
+            *guard = Status::Completed
+        }
     }
 }

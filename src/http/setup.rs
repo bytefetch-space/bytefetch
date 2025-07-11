@@ -1,4 +1,7 @@
-use crate::http::{HttpDownloadMode, Status, builder_utils, config::HttpDownloadConfig};
+use crate::http::{
+    Error, HttpDownloadMode, Status, builder_utils, config::HttpDownloadConfig,
+    request_utils::RequestBuilderExt,
+};
 
 use super::{HttpDownloader, HttpDownloaderSetupErrors, info::HttpDownloadInfo};
 
@@ -93,8 +96,8 @@ pub struct HttpDownloaderSetup {
 }
 
 impl HttpDownloaderSetup {
-    async fn get_headers(&self) -> Result<reqwest::Response, reqwest::Error> {
-        self.client.head(&self.raw_url).send().await
+    async fn get_headers(&self) -> Result<reqwest::Response, Error> {
+        self.client.head(&self.raw_url).send_with_timeout().await
     }
 
     fn generate_info(&self, headers_response: reqwest::Response) -> HttpDownloadInfo {
@@ -125,8 +128,8 @@ impl HttpDownloaderSetup {
         }
     }
 
-    pub async fn init(self) -> HttpDownloader {
-        let headers_response = self.get_headers().await.unwrap();
+    pub async fn init(self) -> Result<HttpDownloader, Error> {
+        let headers_response = self.get_headers().await?;
         let info = self.generate_info(headers_response);
         let mode = builder_utils::determine_mode(self.config.tasks_count, &info);
 
@@ -134,7 +137,7 @@ impl HttpDownloaderSetup {
         (mode == HttpDownloadMode::NonResumable).then(|| config.tasks_count = 0);
         config.split_result =
             builder_utils::try_split_content(&mode, info.content_length(), config.tasks_count);
-        HttpDownloader {
+        Ok(HttpDownloader {
             client: Arc::new(self.client),
             raw_url: Arc::new(self.raw_url),
             info,
@@ -143,6 +146,6 @@ impl HttpDownloaderSetup {
             config,
             status: Arc::new(Mutex::new(Status::Pending)),
             token: CancellationToken::new(),
-        }
+        })
     }
 }
