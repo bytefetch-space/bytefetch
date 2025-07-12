@@ -12,6 +12,7 @@ use reqwest::{
 use std::{
     marker::PhantomData,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -24,6 +25,7 @@ pub struct HttpDownloaderSetupBuilder<State = SetupBuilder> {
     tasks_count: Option<u8>,
     throttle_speed: Option<u64>,
     state: PhantomData<State>,
+    timeout: Option<Duration>,
 }
 
 impl HttpDownloaderSetupBuilder<ClientRequired> {
@@ -35,6 +37,7 @@ impl HttpDownloaderSetupBuilder<ClientRequired> {
             tasks_count: self.tasks_count,
             state: PhantomData::<UrlRequired>,
             throttle_speed: self.throttle_speed,
+            timeout: self.timeout,
         }
     }
 }
@@ -48,6 +51,7 @@ impl HttpDownloaderSetupBuilder<UrlRequired> {
             tasks_count: self.tasks_count,
             state: PhantomData::<SetupBuilder>,
             throttle_speed: self.throttle_speed,
+            timeout: self.timeout,
         }
     }
 }
@@ -60,6 +64,7 @@ impl HttpDownloaderSetupBuilder {
             tasks_count: None,
             state: PhantomData::<ClientRequired>,
             throttle_speed: None,
+            timeout: None,
         }
     }
 
@@ -73,10 +78,16 @@ impl HttpDownloaderSetupBuilder {
         self
     }
 
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
     fn generate_config(&self) -> Result<HttpDownloadConfig, HttpDownloaderSetupErrors> {
         Ok(HttpDownloadConfig::default()
             .try_set_tasks_count(self.tasks_count)?
-            .set_throttle_speed(self.throttle_speed))
+            .set_throttle_speed(self.throttle_speed)
+            .set_timeout(self.timeout))
     }
 
     pub fn build(self) -> Result<HttpDownloaderSetup, HttpDownloaderSetupErrors> {

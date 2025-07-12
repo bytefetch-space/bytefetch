@@ -2,6 +2,7 @@ use reqwest::Client;
 use std::{
     marker::PhantomData,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -20,6 +21,7 @@ pub struct HttpDownloaderFromStateBuilder<State = FromStateBuilder> {
     filename: String,
     client: Option<Client>,
     state: PhantomData<State>,
+    timeout: Option<Duration>,
 }
 
 impl HttpDownloaderFromStateBuilder<ClientRequired> {
@@ -29,6 +31,7 @@ impl HttpDownloaderFromStateBuilder<ClientRequired> {
             client: self.client,
             state: PhantomData::<FromStateBuilder>,
             filename: self.filename,
+            timeout: self.timeout,
         }
     }
 }
@@ -39,6 +42,7 @@ impl HttpDownloaderFromStateBuilder {
             client: None,
             state: PhantomData::<ClientRequired>,
             filename,
+            timeout: None,
         }
     }
 
@@ -81,6 +85,11 @@ impl HttpDownloaderFromStateBuilder {
         }
     }
 
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
+
     pub fn build(self) -> HttpDownloader {
         let mut url = String::new();
         let mut content_length = None;
@@ -96,6 +105,7 @@ impl HttpDownloaderFromStateBuilder {
         let mode = builder_utils::determine_mode(tasks_count, &info);
         let mut config = HttpDownloadConfig::default()
             .set_tasks_count(tasks_count)
+            .set_timeout(self.timeout)
             .mark_resumed();
         config.split_result = builder_utils::try_split_content(&mode, &content_length, tasks_count);
 

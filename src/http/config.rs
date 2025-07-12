@@ -5,6 +5,7 @@ use super::{HttpDownloaderSetupErrors, throttle::ThrottleConfig};
 const DEFAULT_TASKS_COUNT: u8 = 8;
 const MIN_TASKS_COUNT: u8 = 1;
 const MAX_TASKS_COUNT: u8 = 64;
+const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(super) struct HttpDownloadConfig {
     pub(super) tasks_count: u8,
@@ -21,7 +22,7 @@ impl HttpDownloadConfig {
             split_result: None,
             throttle_config: Arc::new(ThrottleConfig::default()),
             is_new: true,
-            timeout: Duration::from_secs(10),
+            timeout: DEFAULT_TIMEOUT,
         }
     }
 
@@ -45,6 +46,13 @@ impl HttpDownloadConfig {
     pub(super) fn set_throttle_speed(self, throttle_speed: Option<u64>) -> Self {
         let task_speed = throttle_speed.unwrap_or_default() / self.tasks_count as u64;
         self.throttle_config.set_task_speed(task_speed);
+        self
+    }
+
+    pub(super) fn set_timeout(mut self, timeout: Option<Duration>) -> Self {
+        if let Some(t) = timeout {
+            self.timeout = t;
+        }
         self
     }
 
