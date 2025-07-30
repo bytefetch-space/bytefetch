@@ -150,7 +150,7 @@ impl HttpDownloaderSetup {
         let mut config = self.config;
         (mode == HttpDownloadMode::NonResumable).then(|| config.tasks_count = 0);
         config.split_result =
-            builder_utils::try_split_content(&mode, info.content_length(), config.tasks_count);
+            builder_utils::try_split_content(&mode, &info.content_length(), config.tasks_count);
         Ok(HttpDownloader {
             client: Arc::new(self.client),
             raw_url: Arc::new(self.raw_url),

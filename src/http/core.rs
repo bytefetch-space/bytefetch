@@ -68,7 +68,7 @@ impl HttpDownloader {
         let state = ProgressState::new(
             self.info.filename(),
             (*self.raw_url).clone(),
-            *self.info.content_length(),
+            self.info.content_length(),
             self.config.tasks_count,
             session.take_download_offsets(),
         );

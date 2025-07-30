@@ -77,8 +77,8 @@ impl HttpDownloadInfo {
         &self.filename
     }
 
-    pub fn content_length(&self) -> &Option<u64> {
-        &self.content_length
+    pub fn content_length(&self) -> Option<u64> {
+        self.content_length
     }
 
     pub fn is_resumable(&self) -> bool {
