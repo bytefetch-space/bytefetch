@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous", "concurrency"]
 [dependencies]
 reqwest = "0.12.15"
 regex = "1.11.1"
-tokio = "1.45.0"
+tokio = { version = "1.45.0", features = ["macros"] }
 bytes = "1.10.1"
 uuid = "1.17.0"
 percent-encoding = "2.3.1"
