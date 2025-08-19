@@ -1,5 +1,5 @@
 use crate::http::{
-    Error, HttpDownloadMode, Status, builder_utils, config::HttpDownloadConfig,
+    DownloadHandle, Error, HttpDownloadMode, builder_utils, config::HttpDownloadConfig,
     request_utils::RequestBuilderExt,
 };
 
@@ -9,12 +9,7 @@ use reqwest::{
     Client,
     header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH},
 };
-use std::{
-    marker::PhantomData,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
-use tokio_util::sync::CancellationToken;
+use std::{marker::PhantomData, sync::Arc, time::Duration};
 
 pub struct ClientRequired;
 pub struct UrlRequired;
@@ -158,8 +153,7 @@ impl HttpDownloaderSetup {
             byte_ranges: HttpDownloaderSetup::generate_byte_ranges(&config, &mode),
             mode,
             config,
-            status: Arc::new(Mutex::new(Status::Pending)),
-            token: CancellationToken::new(),
+            handle: Arc::new(DownloadHandle::new()),
         })
     }
 }

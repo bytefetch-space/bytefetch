@@ -1,5 +1,5 @@
 use std::{
-    sync::{self, Arc, Mutex},
+    sync::{self, Arc},
     time::Duration,
 };
 
@@ -17,7 +17,7 @@ use tokio::{
 use tokio_util::sync::CancellationToken;
 
 use crate::http::{
-    HttpDownloadMode, Status, StatusMutexExt,
+    DownloadHandle, Error, HttpDownloadMode,
     progress_state::{NoOpProgressState, ProgressState, ProgressUpdater},
     request_utils::{RequestBuilderExt, basic_request},
     session::HttpDownloadSession,
@@ -43,7 +43,7 @@ impl HttpDownloader {
     }
 
     pub async fn start(&self) {
-        self.status.update(Status::Downloading);
+        self.handle.mark_downloading();
         let (download_tx, mut download_rx) = channel(512);
         let mut session = HttpDownloadSession::new(self.config.tasks_count as usize);
 
@@ -92,7 +92,7 @@ impl HttpDownloader {
 
         drop(write_tx);
         writer_handle.await.unwrap();
-        self.status.complete_if_downloading();
+        self.handle.mark_completed();
     }
 
     async fn spawn_nonresumable_download_task(
@@ -158,8 +158,7 @@ impl HttpDownloader {
         let throttle_config = Arc::clone(&self.config.throttle_config);
         let download_tx = download_tx.clone();
         let barrier = Arc::clone(barrier);
-        let status = Arc::clone(&self.status);
-        let token = self.token.clone();
+        let handle = Arc::clone(&self.handle);
         let timeout = self.config.timeout;
         tokio::spawn(async move {
             HttpDownloader::download(
@@ -168,8 +167,7 @@ impl HttpDownloader {
                 download_tx,
                 barrier,
                 index,
-                status,
-                token,
+                handle,
                 timeout,
             )
             .await
@@ -182,21 +180,20 @@ impl HttpDownloader {
         download_tx: Sender<(Bytes, usize)>,
         barrier: Arc<Barrier>,
         index: usize,
-        status: Arc<Mutex<Status>>,
-        token: CancellationToken,
+        handle: Arc<DownloadHandle>,
         timeout: Duration,
     ) {
         let mut response = match request.send_with_timeout(timeout).await {
             Ok(response) => response,
             Err(e) => {
-                status.update_and_cancel_download(e.into(), token);
+                handle.mark_failed(e);
                 return;
             }
         };
 
         let mut download_strategy = DownloadStrategy::new(
             download_tx.clone(),
-            token.clone(),
+            handle.token.clone(),
             throttle_config.task_speed(),
         );
 
@@ -207,8 +204,8 @@ impl HttpDownloader {
             sleep_fut.as_mut().reset(Instant::now() + timeout);
 
             select! {
-                _ = token.cancelled() => {
-                    status.update_and_cancel_download(Status::Canceled, token);
+                _ = handle.token.cancelled() => {
+                    handle.mark_canceled();
                     break;
                 }
 
@@ -218,7 +215,7 @@ impl HttpDownloader {
                             download_strategy.handle_chunk(chunk, &index).await;
                             if throttle_config.has_throttle_changed() {
                                 download_strategy =
-                                    DownloadStrategy::new(download_tx.clone(), token.clone(), throttle_config.task_speed());
+                                    DownloadStrategy::new(download_tx.clone(), handle.token.clone(), throttle_config.task_speed());
                                 let wait_result = barrier.wait().await;
                                 if wait_result.is_leader() {
                                     throttle_config.reset_has_throttle_changed();
@@ -227,14 +224,14 @@ impl HttpDownloader {
                         }
                         Ok(None) => break,
                         Err(e) => {
-                            status.update_and_cancel_download(Status::fail_with_network(e), token);
+                            handle.mark_failed(e);
                             break;
                         }
                     }
                 }
 
                 _ = sleep_fut.as_mut() => {
-                    status.update_and_cancel_download(Status::fail_with_timeout(), token);
+                    handle.mark_failed(Error::Timeout);
                     break;
                 }
             }

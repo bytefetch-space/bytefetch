@@ -29,8 +29,7 @@ pub struct HttpDownloader {
     pub mode: HttpDownloadMode,
     config: HttpDownloadConfig,
     byte_ranges: Vec<(u64, u64)>,
-    pub status: Arc<Mutex<Status>>,
-    token: CancellationToken,
+    handle: Arc<DownloadHandle>,
 }
 
 impl HttpDownloader {
@@ -73,10 +72,55 @@ pub enum HttpDownloaderSetupErrors {
     InvalidThreadsCount,
 }
 
+struct DownloadHandle {
+    status: Mutex<Status>,
+    token: CancellationToken,
+}
+
+impl DownloadHandle {
+    fn new() -> Self {
+        Self {
+            status: Mutex::new(Status::Pending),
+            token: CancellationToken::new(),
+        }
+    }
+
+    fn mark_downloading(&self) {
+        let mut status = self.status.lock().unwrap();
+        *status = Status::Downloading;
+    }
+
+    fn update_if_downloading(&self, new_status: Status) {
+        let mut status = self.status.lock().unwrap();
+        if let Status::Downloading = *status {
+            *status = new_status;
+            self.token.cancel();
+        }
+    }
+
+    fn mark_canceled(&self) {
+        self.update_if_downloading(Status::Canceled);
+    }
+
+    fn mark_failed<E: Into<Error>>(&self, err: E) {
+        self.update_if_downloading(Status::Failed(err.into()));
+    }
+
+    fn mark_completed(&self) {
+        self.update_if_downloading(Status::Completed);
+    }
+}
+
 #[derive(Debug)]
 pub enum Error {
     Network(reqwest::Error),
     Timeout,
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(err: reqwest::Error) -> Self {
+        Error::Network(err)
+    }
 }
 
 #[derive(Debug)]
@@ -86,47 +130,4 @@ pub enum Status {
     Completed,
     Failed(Error),
     Canceled,
-}
-
-impl Status {
-    pub fn fail_with_network(e: reqwest::Error) -> Self {
-        Self::Failed(Error::Network(e))
-    }
-
-    pub fn fail_with_timeout() -> Self {
-        Self::Failed(Error::Timeout)
-    }
-}
-
-impl From<Error> for Status {
-    fn from(e: Error) -> Self {
-        Status::Failed(e)
-    }
-}
-
-trait StatusMutexExt {
-    fn update(&self, new: Status);
-    fn update_and_cancel_download(&self, _: Status, _: CancellationToken) {}
-    fn complete_if_downloading(&self) {}
-}
-
-impl StatusMutexExt for Mutex<Status> {
-    fn update(&self, new: Status) {
-        *self.lock().unwrap() = new
-    }
-
-    fn update_and_cancel_download(&self, new: Status, token: CancellationToken) {
-        let mut guard = self.lock().unwrap();
-        if matches!(*guard, Status::Downloading) {
-            *guard = new;
-            token.cancel();
-        }
-    }
-
-    fn complete_if_downloading(&self) {
-        let mut guard = self.lock().unwrap();
-        if matches!(*guard, Status::Downloading) {
-            *guard = Status::Completed
-        }
-    }
 }
