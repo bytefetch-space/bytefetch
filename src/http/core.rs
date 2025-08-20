@@ -32,6 +32,7 @@ use super::{
 
 type StdSender<T> = std::sync::mpsc::Sender<T>;
 type StdReceiver<T> = std::sync::mpsc::Receiver<T>;
+type StdSenderError<T> = std::sync::mpsc::SendError<T>;
 
 impl HttpDownloader {
     fn extract_part_range((start, end): (u64, u64)) -> String {
@@ -74,17 +75,34 @@ impl HttpDownloader {
         let writer_handle = self.spawn_writer(write_rx, file, state);
 
         let write_size = 1024 * 32;
+        let mut can_write = true;
+
         while let Some((chunk, index)) = download_rx.recv().await {
+            if !can_write {
+                continue;
+            }
             self.info.add_to_downloaded_bytes(chunk.len() as u64);
             session.aggregators[index].push(chunk);
             if session.aggregators[index].len() >= write_size {
-                HttpDownloader::flush_to_writer(&write_tx, &mut session.aggregators[index], index);
+                if HttpDownloader::flush_to_writer(
+                    &write_tx,
+                    &mut session.aggregators[index],
+                    index,
+                )
+                .is_err()
+                {
+                    can_write = false;
+                }
             }
         }
 
         for index in 0..session.aggregators.len() {
             if session.aggregators[index].len() > 0 {
-                HttpDownloader::flush_to_writer(&write_tx, &mut session.aggregators[index], index);
+                let _ = HttpDownloader::flush_to_writer(
+                    &write_tx,
+                    &mut session.aggregators[index],
+                    index,
+                );
             }
         }
 
@@ -269,17 +287,18 @@ impl HttpDownloader {
     }
 
     async fn process_chunk(download_tx: &mut Sender<(Bytes, usize)>, chunk: Bytes, index: &usize) {
-        download_tx.send((chunk, *index)).await.unwrap();
+        let _ = download_tx.send((chunk, *index)).await;
     }
 
     fn flush_to_writer(
         write_tx: &StdSender<(usize, u64, Bytes)>,
         aggregator: &mut BytesAggregator,
         index: usize,
-    ) {
+    ) -> Result<(), StdSenderError<(usize, u64, Bytes)>> {
         let offset = aggregator.start_seek();
         let buffer = aggregator.merge_all();
-        write_tx.send((index, offset, buffer)).unwrap();
+        write_tx.send((index, offset, buffer))?;
+        Ok(())
     }
 
     fn file_writer<U: ProgressUpdater>(
