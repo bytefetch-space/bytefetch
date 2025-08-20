@@ -10,28 +10,19 @@ pub(super) struct FileWriter {
 }
 
 impl FileWriter {
-    fn new(filename: &str) -> Self {
-        Self {
-            file: File::create(filename).unwrap(),
-        }
-    }
-
-    fn from(filename: &str) -> Self {
-        Self {
-            file: OpenOptions::new().write(true).open(filename).unwrap(),
-        }
-    }
-
-    pub(super) fn open(filename: &str, is_new: bool) -> Self {
-        if is_new {
-            Self::new(filename)
+    pub(super) fn open(filename: &str, is_new: bool) -> Result<Self, std::io::Error> {
+        let file = if is_new {
+            File::create(filename)?
         } else {
-            Self::from(filename)
-        }
+            OpenOptions::new().write(true).open(filename)?
+        };
+
+        Ok(Self { file })
     }
 
-    pub(super) fn write_at(&mut self, offset: u64, buffer: Bytes) {
-        self.file.seek(SeekFrom::Start(offset)).unwrap();
-        self.file.write_all(&buffer).unwrap();
+    pub(super) fn write_at(&mut self, offset: u64, buffer: Bytes) -> Result<(), std::io::Error> {
+        self.file.seek(SeekFrom::Start(offset))?;
+        self.file.write_all(&buffer)?;
+        Ok(())
     }
 }

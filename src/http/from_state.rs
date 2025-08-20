@@ -4,7 +4,7 @@ use std::{marker::PhantomData, sync::Arc, time::Duration};
 use crate::{
     HttpDownloader,
     http::{
-        DownloadHandle, HttpDownloadConfig, HttpDownloadMode, ProgressState, builder_utils,
+        DownloadHandle, Error, HttpDownloadConfig, HttpDownloadMode, ProgressState, builder_utils,
         info::HttpDownloadInfo,
     },
 };
@@ -85,7 +85,7 @@ impl HttpDownloaderFromStateBuilder {
         self
     }
 
-    pub fn build(self) -> HttpDownloader {
+    pub fn build(self) -> Result<HttpDownloader, Error> {
         let mut url = String::new();
         let mut content_length = None;
         let mut tasks_count = 0;
@@ -94,7 +94,7 @@ impl HttpDownloaderFromStateBuilder {
             &mut url,
             &mut content_length,
             &mut tasks_count,
-        );
+        )?;
 
         let info = Self::generate_info(self.filename, content_length, tasks_count);
         let mode = builder_utils::determine_mode(tasks_count, &info);
@@ -109,7 +109,7 @@ impl HttpDownloaderFromStateBuilder {
 
         info.add_to_downloaded_bytes(number);
 
-        HttpDownloader {
+        Ok(HttpDownloader {
             client: Arc::new(self.client.unwrap()),
             raw_url: Arc::new(url),
             info,
@@ -117,6 +117,6 @@ impl HttpDownloaderFromStateBuilder {
             config,
             byte_ranges,
             handle: Arc::new(DownloadHandle::new()),
-        }
+        })
     }
 }

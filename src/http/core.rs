@@ -44,8 +44,16 @@ impl HttpDownloader {
 
     pub async fn start(&self) {
         self.handle.mark_downloading();
-        let (download_tx, mut download_rx) = channel(512);
+        let (file, state) = match (self.open_file(), self.new_state()) {
+            (Ok(file), Ok(state)) => (file, state),
+            (_, Err(err)) | (Err(err), _) => {
+                self.handle.mark_failed(err);
+                return;
+            }
+        };
+
         let mut session = HttpDownloadSession::new(self.config.tasks_count as usize);
+        let (download_tx, mut download_rx) = channel(512);
 
         match self.mode {
             HttpDownloadMode::NonResumable => {
@@ -63,16 +71,6 @@ impl HttpDownloader {
         }
 
         let (write_tx, write_rx) = sync::mpsc::channel();
-
-        let file = FileWriter::open(self.info.filename(), self.config.is_new);
-        let state = ProgressState::new(
-            self.info.filename(),
-            (*self.raw_url).clone(),
-            self.info.content_length(),
-            self.config.tasks_count,
-            session.take_download_offsets(),
-        );
-
         let writer_handle = self.spawn_writer(write_rx, file, state);
 
         let write_size = 1024 * 32;
@@ -93,6 +91,22 @@ impl HttpDownloader {
         drop(write_tx);
         writer_handle.await.unwrap();
         self.handle.mark_completed();
+    }
+
+    fn open_file(&self) -> Result<FileWriter, std::io::Error> {
+        FileWriter::open(self.info.filename(), self.config.is_new)
+    }
+
+    fn new_state(&self) -> Result<ProgressState, std::io::Error> {
+        let download_offsets: Vec<u64> = self.byte_ranges.iter().map(|(start, _)| *start).collect();
+
+        ProgressState::new(
+            self.info.filename(),
+            (*self.raw_url).clone(),
+            self.info.content_length(),
+            self.config.tasks_count,
+            download_offsets,
+        )
     }
 
     async fn spawn_nonresumable_download_task(
@@ -141,7 +155,6 @@ impl HttpDownloader {
         };
 
         session.aggregators.push(BytesAggregator::new(start));
-        session.download_offsets.push(start);
 
         let request = basic_request(&self.client, &self.raw_url).with_range(part_range);
 
@@ -244,11 +257,13 @@ impl HttpDownloader {
         file: FileWriter,
         state: ProgressState,
     ) -> JoinHandle<()> {
+        let handle = Arc::clone(&self.handle);
         if self.mode == HttpDownloadMode::NonResumable {
-            let writer = move || HttpDownloader::file_writer(write_rx, file, NoOpProgressState);
+            let writer =
+                move || HttpDownloader::file_writer(write_rx, file, NoOpProgressState, handle);
             tokio::task::spawn_blocking(writer)
         } else {
-            let writer = move || HttpDownloader::file_writer(write_rx, file, state);
+            let writer = move || HttpDownloader::file_writer(write_rx, file, state, handle);
             tokio::task::spawn_blocking(writer)
         }
     }
@@ -271,11 +286,18 @@ impl HttpDownloader {
         write_rx: StdReceiver<(usize, u64, Bytes)>,
         mut file: FileWriter,
         mut state: U,
+        handle: Arc<DownloadHandle>,
     ) {
         while let Ok((index, offset, buffer)) = write_rx.recv() {
             let written_bytes = buffer.len() as u64;
-            file.write_at(offset, buffer);
-            state.update_progress(index, written_bytes);
+            if let Err(err) = file.write_at(offset, buffer) {
+                handle.mark_failed(err);
+                return;
+            }
+            if let Err(err) = state.update_progress(index, written_bytes) {
+                handle.mark_failed(err);
+                return;
+            }
         }
     }
 }

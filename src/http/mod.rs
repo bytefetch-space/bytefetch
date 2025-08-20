@@ -114,12 +114,19 @@ impl DownloadHandle {
 #[derive(Debug)]
 pub enum Error {
     Network(reqwest::Error),
+    Io(std::io::Error),
     Timeout,
 }
 
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
         Error::Network(err)
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::Io(err)
     }
 }
 
