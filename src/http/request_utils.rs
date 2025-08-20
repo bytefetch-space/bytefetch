@@ -17,7 +17,7 @@ impl RequestBuilderExt for RequestBuilder {
         let result = tokio::time::timeout(timeout, self.send()).await;
         match result {
             Ok(Ok(response)) => Ok(response),
-            Ok(Err(e)) => Err(Error::Network(e)),
+            Ok(Err(e)) => Err(Error::Network(Arc::new(e))),
             Err(_) => Err(Error::Timeout),
         }
     }

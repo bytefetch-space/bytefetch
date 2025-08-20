@@ -58,6 +58,10 @@ impl HttpDownloader {
             .throttle_config
             .change_throttle_speed(throttle_speed, self.config.tasks_count as u64);
     }
+
+    pub fn status(&self) -> Status {
+        (*self.handle.effective_status.lock().unwrap()).clone()
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -73,27 +77,31 @@ pub enum HttpDownloaderSetupErrors {
 }
 
 struct DownloadHandle {
-    status: Mutex<Status>,
+    raw_status: Mutex<Status>,
+    effective_status: Mutex<Status>,
     token: CancellationToken,
 }
 
 impl DownloadHandle {
     fn new() -> Self {
         Self {
-            status: Mutex::new(Status::Pending),
+            raw_status: Mutex::new(Status::Pending),
+            effective_status: Mutex::new(Status::Pending),
             token: CancellationToken::new(),
         }
     }
 
     fn mark_downloading(&self) {
-        let mut status = self.status.lock().unwrap();
-        *status = Status::Downloading;
+        let mut raw_status = self.raw_status.lock().unwrap();
+        *raw_status = Status::Downloading;
+        let mut effective_status = self.effective_status.lock().unwrap();
+        *effective_status = Status::Downloading;
     }
 
     fn update_if_downloading(&self, new_status: Status) {
-        let mut status = self.status.lock().unwrap();
-        if let Status::Downloading = *status {
-            *status = new_status;
+        let mut raw_status = self.raw_status.lock().unwrap();
+        if let Status::Downloading = *raw_status {
+            *raw_status = new_status;
             self.token.cancel();
         }
     }
@@ -106,31 +114,36 @@ impl DownloadHandle {
         self.update_if_downloading(Status::Failed(err.into()));
     }
 
-    fn mark_completed(&self) {
-        self.update_if_downloading(Status::Completed);
+    fn mark_finished(&self) {
+        let raw_status = self.raw_status.lock().unwrap();
+        let mut effective_status = self.effective_status.lock().unwrap();
+        match &*raw_status {
+            Status::Downloading => *effective_status = Status::Completed,
+            _ => *effective_status = (*raw_status).clone(),
+        }
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
-    Network(reqwest::Error),
-    Io(std::io::Error),
+    Network(Arc<reqwest::Error>),
+    Io(Arc<std::io::Error>),
     Timeout,
 }
 
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
-        Error::Network(err)
+        Error::Network(Arc::new(err))
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
-        Error::Io(err)
+        Error::Io(Arc::new(err))
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Status {
     Pending,
     Downloading,

@@ -108,7 +108,7 @@ impl HttpDownloader {
 
         drop(write_tx);
         writer_handle.await.unwrap();
-        self.handle.mark_completed();
+        self.handle.mark_finished();
     }
 
     fn open_file(&self) -> Result<FileWriter, std::io::Error> {
