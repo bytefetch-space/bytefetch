@@ -4,6 +4,18 @@
 //!
 //! 🚧  **This project is under active development.**
 //!
-//! The current version is an early release to reserve the crate name on [crates.io](https://crates.io/crates/bytefetch).
+//! # 💡 Tips
+//!
+//! **⚠️ Avoid Native TLS Memory Leaks**
+//!
+//! To prevent potential memory leaks, configure `reqwest` to use the **rustls-tls** backend.
+//! This issue originates from native TLS behavior, not from this crate itself.
+//!
+//! Example `Cargo.toml` configuration:
+//!
+//! ```toml
+//! reqwest = { version = "VERSION", default-features = false, features = ["rustls-tls"] }
+//! ```
+//! You can observe the memory behavior yourself using tools like [`heaptrack`](https://github.com/KDE/heaptrack) or similar memory profiling tools.
 mod http;
 pub use http::{HttpDownloader, HttpDownloaderSetupErrors, Status};
