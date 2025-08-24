@@ -1,16 +1,11 @@
-use std::sync::Arc;
-use uuid::Uuid;
-
-use crate::HttpDownloader;
-
 use super::DownloadManager;
+use std::{hash::Hash, sync::Arc};
 
-impl DownloadManager {
-    fn add_download(&mut self, uuid: Uuid, downloader: HttpDownloader) {
-        self.downloads.insert(uuid, Arc::new(downloader));
-    }
-
-    fn start_download(&self, uuid: Uuid) {
-        let downloader = Arc::clone(self.downloads.get(&uuid).unwrap());
+impl<T> DownloadManager<T>
+where
+    T: Hash + Eq + Clone + Send + 'static,
+{
+    pub fn add_download(&self, key: T, url: &str) {
+        self.urls.lock().insert(key, Arc::new(String::from(url)));
     }
 }

@@ -1,4 +1,6 @@
+mod actions;
 mod builder;
+
 use builder::DownloadManagerBuilder;
 use parking_lot::Mutex;
 
