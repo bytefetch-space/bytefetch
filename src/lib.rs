@@ -19,3 +19,5 @@
 //! You can observe the memory behavior yourself using tools like [`heaptrack`](https://github.com/KDE/heaptrack) or similar memory profiling tools.
 mod http;
 pub use http::{HttpDownloader, HttpDownloaderSetupErrors, Status};
+mod manager;
+pub use manager::DownloadManager;
