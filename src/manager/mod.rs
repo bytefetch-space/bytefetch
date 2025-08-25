@@ -4,6 +4,7 @@ mod callbacks;
 
 use builder::DownloadManagerBuilder;
 use parking_lot::Mutex;
+use tokio::runtime::Runtime;
 
 use std::{collections::HashMap, hash::Hash, marker::PhantomData, sync::Arc};
 
@@ -13,6 +14,7 @@ pub struct DownloadManager<T>
 where
     T: Hash,
 {
+    runtime: Arc<Runtime>,
     urls: Mutex<HashMap<T, Arc<String>>>,
     callbacks: Arc<Callbacks<T>>,
 }

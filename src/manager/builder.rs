@@ -1,6 +1,7 @@
-use std::{collections::HashMap, marker::PhantomData, sync::Arc};
+use std::{collections::HashMap, io, marker::PhantomData, sync::Arc};
 
 use parking_lot::Mutex;
+use tokio::runtime::Runtime;
 
 use crate::{
     DownloadManager,
@@ -23,8 +24,9 @@ impl<T> DownloadManagerBuilder<T>
 where
     T: Hash,
 {
-    pub fn build(self) -> DownloadManager<T> {
-        DownloadManager {
+    pub fn build(self) -> io::Result<DownloadManager<T>> {
+        Ok(DownloadManager {
+            runtime: Arc::new(Runtime::new()?),
             urls: Mutex::new(HashMap::new()),
             callbacks: Arc::new(Callbacks {
                 on_progress: self.on_progress,
@@ -32,6 +34,6 @@ where
                 on_failed: self.on_failed,
                 on_canceled: self.on_canceled,
             }),
-        }
+        })
     }
 }
