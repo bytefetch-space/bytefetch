@@ -34,6 +34,7 @@ where
                 on_failed: self.on_failed,
                 on_canceled: self.on_canceled,
             }),
+            tokens: Mutex::new(HashMap::new()),
         })
     }
 }

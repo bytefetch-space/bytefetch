@@ -5,6 +5,7 @@ mod callbacks;
 use builder::DownloadManagerBuilder;
 use parking_lot::Mutex;
 use tokio::runtime::Runtime;
+use tokio_util::sync::CancellationToken;
 
 use std::{collections::HashMap, hash::Hash, marker::PhantomData, sync::Arc};
 
@@ -17,6 +18,7 @@ where
     runtime: Arc<Runtime>,
     urls: Mutex<HashMap<T, Arc<String>>>,
     callbacks: Arc<Callbacks<T>>,
+    tokens: Mutex<HashMap<T, CancellationToken>>,
 }
 
 impl<T> DownloadManager<T>

@@ -1,3 +1,5 @@
+use tokio_util::sync::CancellationToken;
+
 use crate::{HttpDownloader, Status, manager::Callbacks};
 
 use super::DownloadManager;
@@ -16,7 +18,10 @@ where
     T: Hash + Eq + Clone + Send + 'static,
 {
     pub fn add_download(&self, key: T, url: &str) {
-        self.urls.lock().insert(key, Arc::new(String::from(url)));
+        self.urls
+            .lock()
+            .insert(key.clone(), Arc::new(String::from(url)));
+        self.tokens.lock().insert(key, CancellationToken::new());
     }
 
     pub fn start_download(&self, key: T) {
@@ -28,6 +33,7 @@ where
             .client(client)
             .url(&url)
             .tasks_count(16)
+            .cancel_token(self.tokens.lock().get(&key).unwrap().clone())
             .build()
             .unwrap();
 
@@ -96,6 +102,12 @@ where
             Status::Failed(err) => call_cb!(&callbacks.on_failed, key, err),
             Status::Canceled => call_cb!(&callbacks.on_canceled, key),
             _ => {}
+        }
+    }
+
+    pub fn cancel_download(&self, key: T) {
+        if let Some(token) = self.tokens.lock().get(&key) {
+            token.cancel();
         }
     }
 }
