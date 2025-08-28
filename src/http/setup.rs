@@ -10,6 +10,7 @@ use reqwest::{
     header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH},
 };
 use std::{marker::PhantomData, sync::Arc, time::Duration};
+use tokio_util::sync::CancellationToken;
 
 pub struct ClientRequired;
 pub struct UrlRequired;
@@ -21,6 +22,7 @@ pub struct HttpDownloaderSetupBuilder<State = SetupBuilder> {
     throttle_speed: Option<u64>,
     state: PhantomData<State>,
     timeout: Option<Duration>,
+    token: Option<CancellationToken>,
 }
 
 impl HttpDownloaderSetupBuilder<ClientRequired> {
@@ -33,6 +35,7 @@ impl HttpDownloaderSetupBuilder<ClientRequired> {
             state: PhantomData::<UrlRequired>,
             throttle_speed: self.throttle_speed,
             timeout: self.timeout,
+            token: self.token,
         }
     }
 }
@@ -47,6 +50,7 @@ impl HttpDownloaderSetupBuilder<UrlRequired> {
             state: PhantomData::<SetupBuilder>,
             throttle_speed: self.throttle_speed,
             timeout: self.timeout,
+            token: self.token,
         }
     }
 }
@@ -60,6 +64,7 @@ impl HttpDownloaderSetupBuilder {
             state: PhantomData::<ClientRequired>,
             throttle_speed: None,
             timeout: None,
+            token: None,
         }
     }
 
@@ -78,6 +83,11 @@ impl HttpDownloaderSetupBuilder {
         self
     }
 
+    pub fn cancel_token(mut self, token: CancellationToken) -> Self {
+        self.token = Some(token);
+        self
+    }
+
     fn generate_config(&self) -> Result<HttpDownloadConfig, HttpDownloaderSetupErrors> {
         Ok(HttpDownloadConfig::default()
             .try_set_tasks_count(self.tasks_count)?
@@ -91,6 +101,7 @@ impl HttpDownloaderSetupBuilder {
             client: self.client.unwrap(),
             raw_url: self.raw_url.unwrap(),
             config,
+            token: self.token,
         })
     }
 }
@@ -99,6 +110,7 @@ pub struct HttpDownloaderSetup {
     client: Client,
     raw_url: String,
     config: HttpDownloadConfig,
+    token: Option<CancellationToken>,
 }
 
 impl HttpDownloaderSetup {
@@ -153,7 +165,9 @@ impl HttpDownloaderSetup {
             byte_ranges: HttpDownloaderSetup::generate_byte_ranges(&config, &mode),
             mode,
             config,
-            handle: Arc::new(DownloadHandle::new()),
+            handle: Arc::new(DownloadHandle::new(
+                self.token.unwrap_or(CancellationToken::new()),
+            )),
         })
     }
 }

@@ -1,5 +1,6 @@
 use reqwest::Client;
 use std::{marker::PhantomData, sync::Arc, time::Duration};
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     HttpDownloader,
@@ -17,6 +18,7 @@ pub struct HttpDownloaderFromStateBuilder<State = FromStateBuilder> {
     client: Option<Client>,
     state: PhantomData<State>,
     timeout: Option<Duration>,
+    token: Option<CancellationToken>,
 }
 
 impl HttpDownloaderFromStateBuilder<ClientRequired> {
@@ -27,6 +29,7 @@ impl HttpDownloaderFromStateBuilder<ClientRequired> {
             state: PhantomData::<FromStateBuilder>,
             filename: self.filename,
             timeout: self.timeout,
+            token: self.token,
         }
     }
 }
@@ -38,7 +41,13 @@ impl HttpDownloaderFromStateBuilder {
             state: PhantomData::<ClientRequired>,
             filename,
             timeout: None,
+            token: None,
         }
+    }
+
+    pub fn cancel_token(mut self, token: CancellationToken) -> Self {
+        self.token = Some(token);
+        self
     }
 
     fn generate_info(
@@ -116,7 +125,9 @@ impl HttpDownloaderFromStateBuilder {
             mode,
             config,
             byte_ranges,
-            handle: Arc::new(DownloadHandle::new()),
+            handle: Arc::new(DownloadHandle::new(
+                self.token.unwrap_or(CancellationToken::new()),
+            )),
         })
     }
 }

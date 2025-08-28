@@ -83,11 +83,11 @@ struct DownloadHandle {
 }
 
 impl DownloadHandle {
-    fn new() -> Self {
+    fn new(token: CancellationToken) -> Self {
         Self {
             raw_status: Mutex::new(Status::Pending),
             effective_status: Mutex::new(Status::Pending),
-            token: CancellationToken::new(),
+            token,
         }
     }
 
