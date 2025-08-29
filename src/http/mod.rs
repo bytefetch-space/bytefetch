@@ -17,9 +17,10 @@ mod throttle;
 use crate::http::{from_state::HttpDownloaderFromStateBuilder, progress_state::ProgressState};
 use config::HttpDownloadConfig;
 use info::HttpDownloadInfo;
+use parking_lot::Mutex;
 use reqwest::Client;
 use setup::HttpDownloaderSetupBuilder;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 
@@ -61,7 +62,7 @@ impl HttpDownloader {
     }
 
     pub fn status(&self) -> Status {
-        (*self.handle.effective_status.lock().unwrap()).clone()
+        (*self.handle.effective_status.lock()).clone()
     }
 
     pub async fn wait_until_finished(&self) {
@@ -99,14 +100,14 @@ impl DownloadHandle {
     }
 
     fn mark_downloading(&self) {
-        let mut raw_status = self.raw_status.lock().unwrap();
+        let mut raw_status = self.raw_status.lock();
         *raw_status = Status::Downloading;
-        let mut effective_status = self.effective_status.lock().unwrap();
+        let mut effective_status = self.effective_status.lock();
         *effective_status = Status::Downloading;
     }
 
     fn update_if_downloading(&self, new_status: Status) {
-        let mut raw_status = self.raw_status.lock().unwrap();
+        let mut raw_status = self.raw_status.lock();
         if let Status::Downloading = *raw_status {
             *raw_status = new_status;
             self.token.cancel();
@@ -122,8 +123,8 @@ impl DownloadHandle {
     }
 
     fn mark_finished(&self) {
-        let raw_status = self.raw_status.lock().unwrap();
-        let mut effective_status = self.effective_status.lock().unwrap();
+        let raw_status = self.raw_status.lock();
+        let mut effective_status = self.effective_status.lock();
         match &*raw_status {
             Status::Downloading => *effective_status = Status::Completed,
             _ => *effective_status = (*raw_status).clone(),
