@@ -1,3 +1,4 @@
+use tokio::select;
 use tokio_util::sync::CancellationToken;
 
 use crate::{HttpDownloader, Status, manager::Callbacks};
@@ -63,33 +64,38 @@ where
         let mut ema_speed: f64 = 0.0;
         let mut idle_ticks: u8 = 0;
 
-        while matches!(downloader.status(), Status::Downloading) {
-            interval.tick().await;
+        loop {
+            select! {
+                _ = interval.tick() => {
+                    if let Some(cb) = &callbacks.on_progress {
+                        let current = downloader.info.downloaded_bytes();
+                        let instant_speed = (current - last) as f64;
+                        let sma_speed = (instant_speed + last_instant_speed) * 0.5;
 
-            if let Some(cb) = &callbacks.on_progress {
-                let current = downloader.info.downloaded_bytes();
-                let instant_speed = (current - last) as f64;
-                let sma_speed = (instant_speed + last_instant_speed) * 0.5;
+                        idle_ticks = if sma_speed == 0.0 { idle_ticks + 1 } else { 0 };
+                        ema_speed = if idle_ticks == 3 {
+                            0.0
+                        } else {
+                            if ema_speed == 0.0 {
+                                sma_speed
+                            } else {
+                                alpha * sma_speed + (1.0 - alpha) * ema_speed
+                            }
+                        };
 
-                idle_ticks = if sma_speed == 0.0 { idle_ticks + 1 } else { 0 };
-                ema_speed = if idle_ticks == 3 {
-                    0.0
-                } else {
-                    if ema_speed == 0.0 {
-                        sma_speed
-                    } else {
-                        alpha * sma_speed + (1.0 - alpha) * ema_speed
+                        cb(key.clone(), current, ema_speed as u64);
+                        last = current;
+                        last_instant_speed = instant_speed;
                     }
-                };
+                }
 
-                cb(key.clone(), current, ema_speed as u64);
-                last = current;
-                last_instant_speed = instant_speed;
+                _ = downloader.wait_until_finished() => {
+                    break
+                }
             }
         }
 
         if let Some(cb) = &callbacks.on_progress {
-            interval.tick().await;
             cb(
                 key.clone(),
                 downloader.info.downloaded_bytes(),
