@@ -20,6 +20,7 @@ use info::HttpDownloadInfo;
 use reqwest::Client;
 use setup::HttpDownloaderSetupBuilder;
 use std::sync::{Arc, Mutex};
+use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 
 pub struct HttpDownloader {
@@ -62,6 +63,10 @@ impl HttpDownloader {
     pub fn status(&self) -> Status {
         (*self.handle.effective_status.lock().unwrap()).clone()
     }
+
+    pub async fn wait_until_finished(&self) {
+        self.handle.finished.notified().await
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -80,6 +85,7 @@ struct DownloadHandle {
     raw_status: Mutex<Status>,
     effective_status: Mutex<Status>,
     token: CancellationToken,
+    finished: Notify,
 }
 
 impl DownloadHandle {
@@ -88,6 +94,7 @@ impl DownloadHandle {
             raw_status: Mutex::new(Status::Pending),
             effective_status: Mutex::new(Status::Pending),
             token,
+            finished: Notify::new(),
         }
     }
 
@@ -121,6 +128,7 @@ impl DownloadHandle {
             Status::Downloading => *effective_status = Status::Completed,
             _ => *effective_status = (*raw_status).clone(),
         }
+        self.finished.notify_waiters();
     }
 }
 
