@@ -7,7 +7,7 @@ use super::{HttpDownloader, HttpDownloaderSetupErrors, info::HttpDownloadInfo};
 
 use reqwest::{
     Client,
-    header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH},
+    header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE},
 };
 use std::{marker::PhantomData, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
@@ -123,10 +123,11 @@ impl HttpDownloaderSetup {
 
     fn generate_info(&self, headers_response: reqwest::Response) -> HttpDownloadInfo {
         let content_disposition = &headers_response.headers().get(CONTENT_DISPOSITION);
+        let content_type = &headers_response.headers().get(CONTENT_TYPE);
         let content_length = &headers_response.headers().get(CONTENT_LENGTH);
         let accept_ranges = &headers_response.headers().get(ACCEPT_RANGES);
         HttpDownloadInfo::default()
-            .extract_and_set_filename(&self.raw_url, content_disposition)
+            .extract_and_set_filename(&self.raw_url, content_disposition, content_type)
             .extract_and_set_content_length(content_length)
             .extract_and_set_is_resumable(accept_ranges)
     }

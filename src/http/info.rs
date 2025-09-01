@@ -26,8 +26,10 @@ impl HttpDownloadInfo {
         mut self,
         raw_url: &str,
         content_disposition: &Option<&HeaderValue>,
+        content_type: &Option<&HeaderValue>,
     ) -> Self {
-        self.filename = filename_utils::extract_filename(raw_url, content_disposition);
+        self.filename =
+            filename_utils::extract_filename(raw_url, content_disposition, content_type);
         self
     }
 
