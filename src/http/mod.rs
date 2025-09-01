@@ -6,6 +6,7 @@ mod file_writer;
 mod filename_utils;
 mod from_state;
 mod info;
+mod options;
 mod progress_state;
 mod request_utils;
 mod session;
@@ -78,8 +79,8 @@ pub enum HttpDownloadMode {
 }
 
 #[derive(Debug)]
-pub enum HttpDownloaderSetupErrors {
-    InvalidThreadsCount,
+pub enum BuilderErrors {
+    InvalidTasksCount,
     InvalidDirectory,
 }
 
@@ -151,6 +152,12 @@ impl From<reqwest::Error> for Error {
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Self {
         Error::Io(Arc::new(err))
+    }
+}
+
+impl From<BuilderErrors> for Error {
+    fn from(_: BuilderErrors) -> Self {
+        Error::Builder
     }
 }
 

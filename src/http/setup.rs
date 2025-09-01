@@ -1,16 +1,15 @@
 use crate::http::{
-    DownloadHandle, Error, HttpDownloadMode, builder_utils, config::HttpDownloadConfig,
-    request_utils::RequestBuilderExt,
+    BuilderErrors, DownloadHandle, Error, HttpDownloadMode, builder_utils,
+    config::HttpDownloadConfig, options::DownloadOptions, request_utils::RequestBuilderExt,
 };
 
-use super::{HttpDownloader, HttpDownloaderSetupErrors, info::HttpDownloadInfo};
+use super::{HttpDownloader, info::HttpDownloadInfo};
 
 use reqwest::{
     Client,
     header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE},
 };
-use std::{marker::PhantomData, path::PathBuf, sync::Arc, time::Duration};
-use tokio_util::sync::CancellationToken;
+use std::{marker::PhantomData, sync::Arc};
 
 pub struct ClientRequired;
 pub struct UrlRequired;
@@ -21,9 +20,7 @@ pub struct HttpDownloaderSetupBuilder<State = SetupBuilder> {
     tasks_count: Option<u8>,
     throttle_speed: Option<u64>,
     state: PhantomData<State>,
-    timeout: Option<Duration>,
-    token: Option<CancellationToken>,
-    directory: Option<PathBuf>,
+    pub(super) options: DownloadOptions,
 }
 
 impl HttpDownloaderSetupBuilder<ClientRequired> {
@@ -35,9 +32,7 @@ impl HttpDownloaderSetupBuilder<ClientRequired> {
             tasks_count: self.tasks_count,
             state: PhantomData::<UrlRequired>,
             throttle_speed: self.throttle_speed,
-            timeout: self.timeout,
-            token: self.token,
-            directory: self.directory,
+            options: self.options,
         }
     }
 }
@@ -51,9 +46,7 @@ impl HttpDownloaderSetupBuilder<UrlRequired> {
             tasks_count: self.tasks_count,
             state: PhantomData::<SetupBuilder>,
             throttle_speed: self.throttle_speed,
-            timeout: self.timeout,
-            token: self.token,
-            directory: self.directory,
+            options: self.options,
         }
     }
 }
@@ -66,9 +59,7 @@ impl HttpDownloaderSetupBuilder {
             tasks_count: None,
             state: PhantomData::<ClientRequired>,
             throttle_speed: None,
-            timeout: None,
-            token: None,
-            directory: None,
+            options: DownloadOptions::default(),
         }
     }
 
@@ -82,36 +73,21 @@ impl HttpDownloaderSetupBuilder {
         self
     }
 
-    pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
-    }
-
-    pub fn cancel_token(mut self, token: CancellationToken) -> Self {
-        self.token = Some(token);
-        self
-    }
-
-    pub fn directory(mut self, path: PathBuf) -> Self {
-        self.directory = Some(path);
-        self
-    }
-
-    fn generate_config(&self) -> Result<HttpDownloadConfig, HttpDownloaderSetupErrors> {
+    fn generate_config(&self) -> Result<HttpDownloadConfig, BuilderErrors> {
         Ok(HttpDownloadConfig::default()
             .try_set_tasks_count(self.tasks_count)?
-            .try_set_directory(self.directory.clone())?
+            .try_set_directory(self.options.directory.clone())?
             .set_throttle_speed(self.throttle_speed)
-            .set_timeout(self.timeout))
+            .set_timeout(self.options.timeout))
     }
 
-    pub fn build(self) -> Result<HttpDownloaderSetup, HttpDownloaderSetupErrors> {
+    pub fn build(self) -> Result<HttpDownloaderSetup, BuilderErrors> {
         let config = self.generate_config()?;
         Ok(HttpDownloaderSetup {
             client: self.client.unwrap(),
             raw_url: self.raw_url.unwrap(),
             config,
-            token: self.token,
+            options: self.options,
         })
     }
 }
@@ -120,7 +96,7 @@ pub struct HttpDownloaderSetup {
     client: Client,
     raw_url: String,
     config: HttpDownloadConfig,
-    token: Option<CancellationToken>,
+    options: DownloadOptions,
 }
 
 impl HttpDownloaderSetup {
@@ -176,9 +152,7 @@ impl HttpDownloaderSetup {
             byte_ranges: HttpDownloaderSetup::generate_byte_ranges(&config, &mode),
             mode,
             config,
-            handle: Arc::new(DownloadHandle::new(
-                self.token.unwrap_or(CancellationToken::new()),
-            )),
+            handle: Arc::new(DownloadHandle::new(self.options.token)),
         })
     }
 }

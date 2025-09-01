@@ -1,6 +1,8 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
-use super::{HttpDownloaderSetupErrors, throttle::ThrottleConfig};
+use crate::http::BuilderErrors;
+
+use super::throttle::ThrottleConfig;
 
 const DEFAULT_TASKS_COUNT: u8 = 8;
 const MIN_TASKS_COUNT: u8 = 1;
@@ -31,10 +33,10 @@ impl HttpDownloadConfig {
     pub(super) fn try_set_tasks_count(
         mut self,
         tasks_count: Option<u8>,
-    ) -> Result<Self, HttpDownloaderSetupErrors> {
+    ) -> Result<Self, BuilderErrors> {
         self.tasks_count = match tasks_count {
             Some(v) if v >= MIN_TASKS_COUNT && v <= MAX_TASKS_COUNT => v,
-            Some(_) => return Err(HttpDownloaderSetupErrors::InvalidThreadsCount),
+            Some(_) => return Err(BuilderErrors::InvalidTasksCount),
             None => DEFAULT_TASKS_COUNT,
         };
         Ok(self)
@@ -66,19 +68,14 @@ impl HttpDownloadConfig {
     pub(super) fn try_set_directory(
         mut self,
         path: Option<PathBuf>,
-    ) -> Result<Self, HttpDownloaderSetupErrors> {
+    ) -> Result<Self, BuilderErrors> {
         if let Some(path) = path {
             if path.is_dir() || path.as_os_str().is_empty() {
                 self.directory = path;
             } else {
-                return Err(HttpDownloaderSetupErrors::InvalidDirectory);
+                return Err(BuilderErrors::InvalidDirectory);
             }
         }
         Ok(self)
-    }
-
-    pub(super) fn set_directory(mut self, path: PathBuf) -> Self {
-        self.directory = path;
-        self
     }
 }
