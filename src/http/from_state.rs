@@ -81,15 +81,14 @@ impl HttpDownloaderFromStateBuilder {
     }
 
     pub fn build(self) -> Result<HttpDownloader, Error> {
+        let mut config = HttpDownloadConfig::default()
+            .try_set_directory(self.options.directory)?
+            .set_timeout(self.options.timeout)
+            .mark_resumed();
+
         let mut url = String::new();
         let mut content_length = None;
         let mut tasks_count = 0;
-
-        let mut config = HttpDownloadConfig::default()
-            .try_set_directory(self.options.directory)?
-            .set_tasks_count(tasks_count)
-            .set_timeout(self.options.timeout)
-            .mark_resumed();
 
         let state = ProgressState::load(
             config.directory.join(&self.filename),
@@ -97,6 +96,7 @@ impl HttpDownloaderFromStateBuilder {
             &mut content_length,
             &mut tasks_count,
         )?;
+        config.tasks_count = tasks_count;
 
         let info = Self::generate_info(self.filename, content_length, tasks_count);
         let mode = builder_utils::determine_mode(tasks_count, &info);

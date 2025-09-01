@@ -42,11 +42,6 @@ impl HttpDownloadConfig {
         Ok(self)
     }
 
-    pub(super) fn set_tasks_count(mut self, task_count: u8) -> Self {
-        self.tasks_count = task_count;
-        self
-    }
-
     pub(super) fn set_throttle_speed(self, throttle_speed: Option<u64>) -> Self {
         let task_speed = throttle_speed.unwrap_or_default() / self.tasks_count as u64;
         self.throttle_config.set_task_speed(task_speed);
