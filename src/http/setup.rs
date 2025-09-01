@@ -68,7 +68,6 @@ impl HttpDownloaderSetupBuilder {
         Ok(HttpDownloadConfig::default()
             .try_set_tasks_count(self.tasks_count)?
             .try_set_directory(self.options.directory.clone())?
-            .set_throttle_speed(self.options.throttle_speed)
             .set_timeout(self.options.timeout))
     }
 
@@ -134,6 +133,7 @@ impl HttpDownloaderSetup {
 
         let mut config = self.config;
         (mode == HttpDownloadMode::NonResumable).then(|| config.tasks_count = 0);
+        config.set_throttle_speed(self.options.throttle_speed);
 
         config.split_result =
             builder_utils::try_split_content(&mode, &info.content_length(), config.tasks_count);
