@@ -18,7 +18,6 @@ pub struct HttpDownloaderSetupBuilder<State = SetupBuilder> {
     client: Option<Client>,
     raw_url: Option<String>,
     tasks_count: Option<u8>,
-    throttle_speed: Option<u64>,
     state: PhantomData<State>,
     pub(super) options: DownloadOptions,
 }
@@ -31,7 +30,6 @@ impl HttpDownloaderSetupBuilder<ClientRequired> {
             raw_url: self.raw_url,
             tasks_count: self.tasks_count,
             state: PhantomData::<UrlRequired>,
-            throttle_speed: self.throttle_speed,
             options: self.options,
         }
     }
@@ -45,7 +43,6 @@ impl HttpDownloaderSetupBuilder<UrlRequired> {
             raw_url: self.raw_url,
             tasks_count: self.tasks_count,
             state: PhantomData::<SetupBuilder>,
-            throttle_speed: self.throttle_speed,
             options: self.options,
         }
     }
@@ -58,7 +55,6 @@ impl HttpDownloaderSetupBuilder {
             raw_url: None,
             tasks_count: None,
             state: PhantomData::<ClientRequired>,
-            throttle_speed: None,
             options: DownloadOptions::default(),
         }
     }
@@ -68,16 +64,11 @@ impl HttpDownloaderSetupBuilder {
         self
     }
 
-    pub fn speed_limit(mut self, kilobytes_per_second: u64) -> Self {
-        self.throttle_speed = Some(1024 * kilobytes_per_second);
-        self
-    }
-
     fn generate_config(&self) -> Result<HttpDownloadConfig, BuilderErrors> {
         Ok(HttpDownloadConfig::default()
             .try_set_tasks_count(self.tasks_count)?
             .try_set_directory(self.options.directory.clone())?
-            .set_throttle_speed(self.throttle_speed)
+            .set_throttle_speed(self.options.throttle_speed)
             .set_timeout(self.options.timeout))
     }
 
@@ -143,6 +134,7 @@ impl HttpDownloaderSetup {
 
         let mut config = self.config;
         (mode == HttpDownloadMode::NonResumable).then(|| config.tasks_count = 0);
+
         config.split_result =
             builder_utils::try_split_content(&mode, &info.content_length(), config.tasks_count);
         Ok(HttpDownloader {

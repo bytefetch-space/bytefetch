@@ -83,6 +83,7 @@ impl HttpDownloaderFromStateBuilder {
     pub fn build(self) -> Result<HttpDownloader, Error> {
         let mut config = HttpDownloadConfig::default()
             .try_set_directory(self.options.directory)?
+            .set_throttle_speed(self.options.throttle_speed)
             .set_timeout(self.options.timeout)
             .mark_resumed();
 
