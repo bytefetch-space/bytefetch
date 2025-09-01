@@ -112,14 +112,16 @@ impl HttpDownloader {
     }
 
     fn open_file(&self) -> Result<FileWriter, std::io::Error> {
-        FileWriter::open(self.info.filename(), self.config.is_new)
+        FileWriter::open(
+            self.config.directory.join(self.info.filename()),
+            self.config.is_new,
+        )
     }
 
     fn new_state(&self) -> Result<ProgressState, std::io::Error> {
         let download_offsets: Vec<u64> = self.byte_ranges.iter().map(|(start, _)| *start).collect();
-
         ProgressState::new(
-            self.info.filename(),
+            self.config.directory.join(self.info.filename()),
             (*self.raw_url).clone(),
             self.info.content_length(),
             self.config.tasks_count,

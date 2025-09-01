@@ -1,6 +1,7 @@
 use std::{
     fs::{File, OpenOptions},
     io::{Read, Seek, SeekFrom, Write},
+    path::PathBuf,
 };
 
 const U64_SIZE: u64 = 8;
@@ -40,13 +41,14 @@ pub(super) struct ProgressState {
 
 impl ProgressState {
     pub(super) fn new(
-        filename: &str,
+        filename: PathBuf,
         url: String,
         content_length: Option<u64>,
         tasks_count: u8,
         download_offsets: Vec<u64>,
     ) -> Result<Self> {
-        let mut file = File::create(filename.to_string() + STATE_EXTENSION)?;
+        let state_path = format!("{}{}", filename.display(), STATE_EXTENSION);
+        let mut file = File::create(state_path)?;
 
         let url_serialized_size = ProgressState::write_string(&mut file, url)?; // 4 + N Bytes
         let content_length_serialized_size =
@@ -67,15 +69,13 @@ impl ProgressState {
     }
 
     pub(super) fn load(
-        filename: &str,
+        filename: PathBuf,
         url: &mut String,
         content_length: &mut Option<u64>,
         tasks_count: &mut u8,
     ) -> Result<Self> {
-        let mut file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(filename.to_string() + STATE_EXTENSION)?;
+        let state_path = format!("{}{}", filename.display(), STATE_EXTENSION);
+        let mut file = OpenOptions::new().read(true).write(true).open(state_path)?;
 
         let (url_serialized_size, deserialized_url) = ProgressState::read_string(&mut file)?;
         *url = deserialized_url;

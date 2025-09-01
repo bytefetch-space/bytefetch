@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use super::{HttpDownloaderSetupErrors, throttle::ThrottleConfig};
 
@@ -13,6 +13,7 @@ pub(super) struct HttpDownloadConfig {
     pub(super) throttle_config: Arc<ThrottleConfig>,
     pub(super) is_new: bool,
     pub(super) timeout: Duration,
+    pub(super) directory: PathBuf,
 }
 
 impl HttpDownloadConfig {
@@ -23,6 +24,7 @@ impl HttpDownloadConfig {
             throttle_config: Arc::new(ThrottleConfig::default()),
             is_new: true,
             timeout: DEFAULT_TIMEOUT,
+            directory: PathBuf::new(),
         }
     }
 
@@ -58,6 +60,25 @@ impl HttpDownloadConfig {
 
     pub(super) fn mark_resumed(mut self) -> Self {
         self.is_new = false;
+        self
+    }
+
+    pub(super) fn try_set_directory(
+        mut self,
+        path: Option<PathBuf>,
+    ) -> Result<Self, HttpDownloaderSetupErrors> {
+        if let Some(path) = path {
+            if path.is_dir() || path.as_os_str().is_empty() {
+                self.directory = path;
+            } else {
+                return Err(HttpDownloaderSetupErrors::InvalidDirectory);
+            }
+        }
+        Ok(self)
+    }
+
+    pub(super) fn set_directory(mut self, path: PathBuf) -> Self {
+        self.directory = path;
         self
     }
 }

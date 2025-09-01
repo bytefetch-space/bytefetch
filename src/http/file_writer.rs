@@ -1,6 +1,7 @@
 use std::{
     fs::{File, OpenOptions},
     io::{Seek, SeekFrom, Write},
+    path::PathBuf,
 };
 
 use bytes::Bytes;
@@ -10,7 +11,7 @@ pub(super) struct FileWriter {
 }
 
 impl FileWriter {
-    pub(super) fn open(filename: &str, is_new: bool) -> Result<Self, std::io::Error> {
+    pub(super) fn open(filename: PathBuf, is_new: bool) -> Result<Self, std::io::Error> {
         let file = if is_new {
             File::create(filename)?
         } else {

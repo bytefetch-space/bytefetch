@@ -9,7 +9,7 @@ use reqwest::{
     Client,
     header::{ACCEPT_RANGES, CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE},
 };
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{marker::PhantomData, path::PathBuf, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
 pub struct ClientRequired;
@@ -23,6 +23,7 @@ pub struct HttpDownloaderSetupBuilder<State = SetupBuilder> {
     state: PhantomData<State>,
     timeout: Option<Duration>,
     token: Option<CancellationToken>,
+    directory: Option<PathBuf>,
 }
 
 impl HttpDownloaderSetupBuilder<ClientRequired> {
@@ -36,6 +37,7 @@ impl HttpDownloaderSetupBuilder<ClientRequired> {
             throttle_speed: self.throttle_speed,
             timeout: self.timeout,
             token: self.token,
+            directory: self.directory,
         }
     }
 }
@@ -51,6 +53,7 @@ impl HttpDownloaderSetupBuilder<UrlRequired> {
             throttle_speed: self.throttle_speed,
             timeout: self.timeout,
             token: self.token,
+            directory: self.directory,
         }
     }
 }
@@ -65,6 +68,7 @@ impl HttpDownloaderSetupBuilder {
             throttle_speed: None,
             timeout: None,
             token: None,
+            directory: None,
         }
     }
 
@@ -88,9 +92,15 @@ impl HttpDownloaderSetupBuilder {
         self
     }
 
+    pub fn directory(mut self, path: PathBuf) -> Self {
+        self.directory = Some(path);
+        self
+    }
+
     fn generate_config(&self) -> Result<HttpDownloadConfig, HttpDownloaderSetupErrors> {
         Ok(HttpDownloadConfig::default()
             .try_set_tasks_count(self.tasks_count)?
+            .try_set_directory(self.directory.clone())?
             .set_throttle_speed(self.throttle_speed)
             .set_timeout(self.timeout))
     }

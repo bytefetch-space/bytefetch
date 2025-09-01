@@ -1,5 +1,5 @@
 use reqwest::Client;
-use std::{marker::PhantomData, sync::Arc, time::Duration};
+use std::{marker::PhantomData, path::PathBuf, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -19,6 +19,7 @@ pub struct HttpDownloaderFromStateBuilder<State = FromStateBuilder> {
     state: PhantomData<State>,
     timeout: Option<Duration>,
     token: Option<CancellationToken>,
+    directory: Option<PathBuf>,
 }
 
 impl HttpDownloaderFromStateBuilder<ClientRequired> {
@@ -30,6 +31,7 @@ impl HttpDownloaderFromStateBuilder<ClientRequired> {
             filename: self.filename,
             timeout: self.timeout,
             token: self.token,
+            directory: self.directory,
         }
     }
 }
@@ -42,11 +44,17 @@ impl HttpDownloaderFromStateBuilder {
             filename,
             timeout: None,
             token: None,
+            directory: None,
         }
     }
 
     pub fn cancel_token(mut self, token: CancellationToken) -> Self {
         self.token = Some(token);
+        self
+    }
+
+    pub fn directory(mut self, path: PathBuf) -> Self {
+        self.directory = Some(path);
         self
     }
 
@@ -95,11 +103,16 @@ impl HttpDownloaderFromStateBuilder {
     }
 
     pub fn build(self) -> Result<HttpDownloader, Error> {
+        let directory = match self.directory {
+            Some(path) if path.is_dir() => path,
+            Some(_) => return Err(Error::Builder),
+            None => PathBuf::new(),
+        };
         let mut url = String::new();
         let mut content_length = None;
         let mut tasks_count = 0;
         let state = ProgressState::load(
-            &self.filename,
+            directory.join(&self.filename),
             &mut url,
             &mut content_length,
             &mut tasks_count,
@@ -109,6 +122,7 @@ impl HttpDownloaderFromStateBuilder {
         let mode = builder_utils::determine_mode(tasks_count, &info);
         let mut config = HttpDownloadConfig::default()
             .set_tasks_count(tasks_count)
+            .set_directory(directory)
             .set_timeout(self.timeout)
             .mark_resumed();
         config.split_result = builder_utils::try_split_content(&mode, &content_length, tasks_count);

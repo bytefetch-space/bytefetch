@@ -80,6 +80,7 @@ pub enum HttpDownloadMode {
 #[derive(Debug)]
 pub enum HttpDownloaderSetupErrors {
     InvalidThreadsCount,
+    InvalidDirectory,
 }
 
 struct DownloadHandle {
@@ -138,6 +139,7 @@ pub enum Error {
     Network(Arc<reqwest::Error>),
     Io(Arc<std::io::Error>),
     Timeout,
+    Builder,
 }
 
 impl From<reqwest::Error> for Error {
