@@ -27,14 +27,13 @@ where
     pub fn build(self) -> io::Result<DownloadManager<T>> {
         Ok(DownloadManager {
             runtime: Arc::new(Runtime::new()?),
-            urls: Mutex::new(HashMap::new()),
             callbacks: Arc::new(Callbacks {
                 on_progress: self.on_progress,
                 on_completed: self.on_completed,
                 on_failed: self.on_failed,
                 on_canceled: self.on_canceled,
             }),
-            tokens: Mutex::new(HashMap::new()),
+            downloads: Mutex::new(HashMap::new()),
         })
     }
 }

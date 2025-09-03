@@ -1,7 +1,13 @@
 use tokio::select;
-use tokio_util::sync::CancellationToken;
 
-use crate::{HttpDownloader, Status, manager::Callbacks};
+use crate::{
+    DownloadConfig, HttpDownloader, Status,
+    http::{
+        from_state::HttpDownloaderFromStateBuilder, options::CommonDownloadOptions,
+        setup::HttpDownloaderSetupBuilder,
+    },
+    manager::{Callbacks, DownloadEntry},
+};
 
 use super::DownloadManager;
 use std::{hash::Hash, sync::Arc, time::Duration};
@@ -18,23 +24,25 @@ impl<T> DownloadManager<T>
 where
     T: Hash + Eq + Clone + Send + 'static,
 {
-    pub fn add_download(&self, key: T, url: &str) {
-        self.urls
-            .lock()
-            .insert(key.clone(), Arc::new(String::from(url)));
-        self.tokens.lock().insert(key, CancellationToken::new());
+    pub fn add_download(&self, key: T, entry: DownloadEntry) {
+        self.downloads.lock().insert(key, Arc::new(entry));
     }
 
     pub fn start_download(&self, key: T) {
         let callbacks = self.callbacks.clone();
 
-        let url = self.urls.lock().get(&key).unwrap().clone();
+        let entry = match self.downloads.lock().get(&key).cloned() {
+            Some(entry) => entry,
+            None => return,
+        };
+
         let client = reqwest::Client::builder().build().unwrap();
+
         let setup = HttpDownloader::setup()
             .client(client)
-            .url(&url)
-            .tasks_count(16)
-            .cancel_token(self.tokens.lock().get(&key).unwrap().clone())
+            .url(&entry.url)
+            .cancel_token(entry.token.clone())
+            .apply_common_options(entry.config.clone())
             .build()
             .unwrap();
 
@@ -112,8 +120,37 @@ where
     }
 
     pub fn cancel_download(&self, key: T) {
-        if let Some(token) = self.tokens.lock().get(&key) {
-            token.cancel();
+        if let Some(entry) = self.downloads.lock().get(&key) {
+            entry.token.cancel();
         }
     }
 }
+
+macro_rules! apply_common_options {
+    ($builder:expr, $config:expr, [$($field:ident),* $(,)?]) => {{
+        let mut b = $builder;
+        $(
+            if let Some(value) = $config.$field {
+                b = b.$field(value);
+            }
+        )*
+        b
+    }};
+}
+
+fn apply_common_options<O: CommonDownloadOptions>(builder: O, config: Option<DownloadConfig>) -> O {
+    if let Some(config) = config {
+        apply_common_options!(builder, config, [directory, speed_limit, timeout])
+    } else {
+        builder
+    }
+}
+
+pub trait CommonDownloadOptionsExt: CommonDownloadOptions + Sized {
+    fn apply_common_options(self, config: Option<DownloadConfig>) -> Self {
+        super::actions::apply_common_options(self, config)
+    }
+}
+
+impl CommonDownloadOptionsExt for HttpDownloaderSetupBuilder {}
+impl CommonDownloadOptionsExt for HttpDownloaderFromStateBuilder {}

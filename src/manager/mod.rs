@@ -1,24 +1,24 @@
 mod actions;
 mod builder;
 mod callbacks;
+pub(crate) mod config;
+pub(crate) mod entry;
 
 use builder::DownloadManagerBuilder;
 use parking_lot::Mutex;
 use tokio::runtime::Runtime;
-use tokio_util::sync::CancellationToken;
 
 use std::{collections::HashMap, hash::Hash, marker::PhantomData, sync::Arc};
 
-use crate::manager::callbacks::Callbacks;
+use crate::manager::{callbacks::Callbacks, entry::DownloadEntry};
 
 pub struct DownloadManager<T>
 where
     T: Hash,
 {
     runtime: Arc<Runtime>,
-    urls: Mutex<HashMap<T, Arc<String>>>,
     callbacks: Arc<Callbacks<T>>,
-    tokens: Mutex<HashMap<T, CancellationToken>>,
+    downloads: Mutex<HashMap<T, Arc<DownloadEntry>>>,
 }
 
 impl<T> DownloadManager<T>

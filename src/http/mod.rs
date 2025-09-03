@@ -4,13 +4,13 @@ mod config;
 mod core;
 mod file_writer;
 mod filename_utils;
-mod from_state;
+pub(crate) mod from_state;
 mod info;
-mod options;
+pub(crate) mod options;
 mod progress_state;
 mod request_utils;
 mod session;
-mod setup;
+pub(crate) mod setup;
 #[cfg(test)]
 mod tests;
 mod throttle;

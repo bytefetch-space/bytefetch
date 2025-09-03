@@ -20,4 +20,4 @@
 mod http;
 pub use http::{BuilderErrors, HttpDownloader, Status};
 mod manager;
-pub use manager::DownloadManager;
+pub use manager::{DownloadManager, config::DownloadConfig, entry::DownloadEntry};

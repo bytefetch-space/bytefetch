@@ -22,7 +22,7 @@ impl DownloadOptions {
     }
 }
 
-pub(crate) trait CommonDownloadOptions: Sized {
+pub trait CommonDownloadOptions: Sized {
     fn options_mut(&mut self) -> &mut DownloadOptions;
 
     fn timeout(mut self, timeout: Duration) -> Self {
